@@ -40,7 +40,7 @@ This repository:
 AGENTS.md          how agents work on this repository
 docs/adr/          decisions about the factory
 agents/            role definitions: planner, builder, verifier, operator
-skills/            skill library; each skill has SKILL.md, examples/ and evals/
+skills/            skill library; each skill has SKILL.md, and examples/ and evals/ once it has them
 workflows/         the flows by stage (explore, validate, grow) and by kind (feature, bug fix, release)
 policies/          default policy: what needs approval, what agents may do alone
 templates/         the skeleton of a new product repository

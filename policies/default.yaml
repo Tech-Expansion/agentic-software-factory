@@ -1,0 +1,32 @@
+# Default policy. A product's .factory/policy.yaml can only tighten it.
+max_attempts: 3
+max_tokens_per_item: 3000000
+denied_commands:
+  - git push
+  - git remote
+  - git reset --hard
+  - git checkout
+  - git switch
+  - git rebase
+  - git merge
+  - rm -rf
+  - sudo
+  - curl
+  - wget
+approval_paths:
+  - "**/package.json"
+  - "**/*.csproj"
+  - "**/requirements*.txt"
+  - "**/pyproject.toml"
+  - "**/go.mod"
+  - "**/Cargo.toml"
+  - "**/migrations/**"
+  - "**/Dockerfile"
+  - ".github/**"
+# Unattended runs may not change these. Planning them is done with the user, in `asf discover`.
+protected_paths:
+  - ".factory/**"
+  - "AGENTS.md"
+  - "product/**"
+  - "specs/**"
+  - "backlog/**"

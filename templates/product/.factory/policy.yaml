@@ -1,0 +1,6 @@
+# Tightens policies/default.yaml of the factory for this product. Limits can only go down, lists only grow.
+# max_attempts: 2
+# max_tokens_per_item: 1500000
+# denied_commands: []
+# approval_paths: []
+# protected_paths: []
