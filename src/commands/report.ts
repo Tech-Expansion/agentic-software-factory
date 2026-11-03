@@ -1,12 +1,12 @@
 import { loadBacklog } from '../backlog.js';
-import { readEvents } from '../runlog.js';
+import { day, readEvents } from '../runlog.js';
 import { loadState } from '../state.js';
 import { openProduct } from './context.js';
 
 const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
 /** The daily report: what moved, what waits for the user, what is blocked, and what the tokens went to. */
-export function report(date: string = new Date().toISOString().slice(0, 10)): string {
+export function report(date: string = day(new Date().toISOString())): string {
   const { paths, project } = openProduct();
   const { items } = loadBacklog(paths.backlog);
   const state = loadState(paths.state);

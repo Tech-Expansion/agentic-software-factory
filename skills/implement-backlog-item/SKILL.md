@@ -8,6 +8,7 @@ description: Implement one backlog item against its acceptance criteria, tests f
    criterion id (for example `AC-001 rejects an empty room name`) so the verifier can find it.
 3. Make the smallest change that makes those tests pass.
 4. Run the commands from "Checks the runner will run after you" yourself, and fix what fails before you finish.
+   Run each exactly as written, from the worktree root: no `cd`, pipes or redirection. Anything else is refused.
 5. If this is a retry, the feedback section tells you what failed. Fix that first, and do not undo work that passed.
 
 Keep the diff focused: no drive-by refactors, no reformatting of untouched code, no new dependency unless the item

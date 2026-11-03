@@ -154,7 +154,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         cost_usd: result.costUsd,
         duration_ms: result.durationMs,
         outcome: result.ok ? 'ok' : 'error',
-        detail: result.error,
+        detail: result.error ?? (result.denied ? `denied: ${result.denied.join('; ')}` : undefined),
       });
       log(`${item.id} attempt ${attempt} ${step.id} (${runtimeName}): ${result.ok ? 'ok' : 'error'}, ${result.tokens.total} tokens`);
       // A runtime error is usually a limit or a sign-in problem; retrying would only burn tokens.

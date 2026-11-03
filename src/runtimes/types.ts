@@ -26,6 +26,8 @@ export interface AgentResult {
   costUsd?: number;
   durationMs: number;
   error?: string;
+  /** Tool calls the CLI refused, for example a command outside the allowed list. */
+  denied?: string[];
 }
 
 export interface InteractiveCall {

@@ -24,7 +24,13 @@ export interface RunEvent {
   detail?: string;
 }
 
-export const day = (iso: string) => iso.slice(0, 10);
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** The local calendar day of a timestamp: a report for "today" means the user's today. */
+export const day = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 /** Appends one event to `<runs>/<date>.jsonl`. The log is append-only. */
 export function appendEvent(runsDir: string, event: RunEvent): void {

@@ -10,6 +10,7 @@ interface ClaudeJson {
   subtype?: string;
   structured_output?: unknown;
   total_cost_usd?: number;
+  permission_denials?: { tool_name?: string; tool_input?: { command?: string; file_path?: string } }[];
   usage?: {
     input_tokens?: number;
     cache_creation_input_tokens?: number;
@@ -57,12 +58,14 @@ export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs
   const output = u.output_tokens ?? 0;
   const tokens = { input, cached_input: cached, output, total: input + cached + output };
   const ok = !data.is_error && data.subtype !== 'error';
+  const denied = (data.permission_denials ?? []).map((d) => `${d.tool_name ?? '?'}: ${d.tool_input?.command ?? d.tool_input?.file_path ?? ''}`.trim());
   return {
     ok,
     text: data.result ?? '',
     structured: data.structured_output,
     tokens,
     costUsd: data.total_cost_usd,
+    denied: denied.length ? denied : undefined,
     error: ok ? undefined : tail(data.result ?? data.subtype ?? 'unknown error', 1000),
   };
 }

@@ -94,9 +94,11 @@ test('claude adapter: usage and structured output are read from the result', () 
       structured_output: { verdict: 'pass' },
       total_cost_usd: 0.01,
       usage: { input_tokens: 2, cache_creation_input_tokens: 100, cache_read_input_tokens: 50, output_tokens: 10 },
+      permission_denials: [{ tool_name: 'Bash', tool_input: { command: 'node --test | tail' } }],
     }),
   );
   assert.equal(out.ok, true);
+  assert.deepEqual(out.denied, ['Bash: node --test | tail']);
   assert.deepEqual(out.tokens, { input: 102, cached_input: 50, output: 10, total: 162 });
   assert.deepEqual(out.structured, { verdict: 'pass' });
   assert.equal(parseClaudeOutput('not json').ok, false);
