@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BacklogItem } from './backlog.js';
+import { subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
 import { runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
@@ -257,7 +257,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     stageAndList(worktree, base);
     const secrets = findSecrets(git(worktree, ['diff', '--cached', '-U0', base]), policy.secret_patterns);
     if (secrets.length) return finish('blocked', `the acceptance tests contain what looks like a secret:\n${secrets.map((x) => `- ${x}`).join('\n')}`);
-    if (files.length && commitAll(worktree, `test: acceptance tests for ${item.title}\n\nBacklog: ${item.id}\n`)) {
+    if (files.length && commitAll(worktree, `${subject(item, `test: acceptance tests for ${item.title}`)}\n\nBacklog: ${item.id}\n`)) {
       st.tests = { commit: git(worktree, ['rev-parse', 'HEAD']).trim(), files };
       const red = runChecks(worktree, project.commands.check, policy.sandbox);
       const green = red.every((r) => r.ok);
@@ -353,7 +353,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
       // Anything flagged waits for the owner on its own, even with an integration branch.
       const flags = changed.filter((f) => matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths));
       if (item.risk === 'high') flags.push('risk: high');
-      commitAll(worktree, `feat: ${item.title}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
+      commitAll(worktree, `${subject(item, `feat: ${item.title}`)}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
       st.feedback = undefined;
       return finish('review', undefined, flags);
     }

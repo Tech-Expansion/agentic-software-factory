@@ -148,7 +148,7 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
     const file = join(paths.backlog, `${String(n).padStart(4, '0')}-${slug(t.title)}.md`);
     const title = t.title.replace(/\n/g, ' ').trim() || t.key;
     writeFileSync(file, `---\nid: ${id}\ntitle: ${JSON.stringify(title)}\nstatus: new\ntracker: ${t.key}\n---\n${t.body.trim()}\n\nSource: ${t.key}\n`);
-    commitFiles(paths.root, [file], `chore(backlog): ${id} from ${t.key}\n`);
+    commitFiles(paths.root, [file], `[${t.key}] chore(backlog): ${id} from ${t.key}\n`);
     links.items[id] = { key: t.key, seen: (await tracker.comments(t.key)).map((c) => c.id) };
     save();
     await move(t.key, 'clarifying');

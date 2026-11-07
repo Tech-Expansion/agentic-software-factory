@@ -76,6 +76,9 @@ export function setStatus(file: string, status: BacklogItem['status']): void {
   writeFileSync(file, front + text.slice(m[0].length));
 }
 
+/** A commit subject for an item's work: led by its ticket when it has one, as "[AI-7] feat: ...". */
+export const subject = (item: Pick<BacklogItem, 'tracker'>, text: string) => (item.tracker ? `[${item.tracker}] ${text}` : text);
+
 export function relativeFile(root: string, item: BacklogItem): string {
   return relative(root, item.file);
 }

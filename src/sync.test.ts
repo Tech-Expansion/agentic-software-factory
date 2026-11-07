@@ -82,7 +82,7 @@ test('a ticket goes from intake to merged through the tracker alone, and only th
   assert.deepEqual(await sync({ tracker: j.tracker }), ['AI-7 → B-0001 (backlog/0001-vi-cardano-da-chu-ky.md)']);
   const file = join(root, 'backlog/0001-vi-cardano-da-chu-ky.md');
   assert.match(readFileSync(file, 'utf8'), /id: B-0001\ntitle: "Ví Cardano đa chữ ký"\nstatus: new\ntracker: AI-7\n---\nA wallet with multi-sig\.\n\nSource: AI-7/);
-  assert.match(git(root, ['log', '-1', '--format=%s']), /B-0001 from AI-7/);
+  assert.match(git(root, ['log', '-1', '--format=%s']), /^\[AI-7\] chore\(backlog\): B-0001 from AI-7/);
   assert.deepEqual(await sync({ tracker: j.tracker }), [], 'a ticket is taken in once');
 
   await clarify({ context: ctx });
@@ -109,6 +109,8 @@ test('a ticket goes from intake to merged through the tracker alone, and only th
   j.add('AI-7', OWNER, 'Looks right.\n/approve');
   await sync({ tracker: j.tracker });
   assert.equal(readFileSync(join(root, 'hello.txt'), 'utf8'), 'x\n');
+  assert.match(git(root, ['log', '-1', '--format=%s']), /^\[AI-7\] Merge B-0001/, 'commits lead with the ticket');
+  assert.match(git(root, ['log', '--format=%s']), /^\[AI-7\] feat: Ví Cardano/m);
   assert.deepEqual(j.moves, ['AI-7→Clarifying', 'AI-7→Ready', 'AI-7→In Review', 'AI-7→Done']);
   assert.match(j.comments['AI-7']!.at(-1)!.body, /B-0001 is in main/);
   await sync({ tracker: j.tracker });

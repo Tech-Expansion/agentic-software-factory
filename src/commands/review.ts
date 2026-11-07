@@ -1,4 +1,4 @@
-import { loadBacklog, setStatus } from '../backlog.js';
+import { loadBacklog, setStatus, subject } from '../backlog.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { commitAll, currentBranch, ensureWorktree, git, isClean, removeWorktree } from '../git.js';
@@ -47,9 +47,9 @@ export function approve(id: string, root?: string): { merged: string; into: stri
   const item = loadBacklog(join(st.worktree, 'backlog')).items.find((i) => i.id === id);
   if (!item) throw new UsageError(`${id} not found in the item's worktree`);
   setStatus(item.file, 'done');
-  commitAll(st.worktree, `chore(backlog): mark ${id} done\n`);
+  commitAll(st.worktree, `${subject(item, `chore(backlog): mark ${id} done`)}\n`);
   const target = integration ? integrationWorktree(paths.root, paths.factory, integration, base) : paths.root;
-  const merged = spawnSync('git', ['merge', '--no-ff', '-q', st.branch, '-m', `Merge ${id}: ${item.title}`], { cwd: target, encoding: 'utf8' });
+  const merged = spawnSync('git', ['merge', '--no-ff', '-q', st.branch, '-m', subject(item, `Merge ${id}: ${item.title}`)], { cwd: target, encoding: 'utf8' });
   if (merged.status !== 0) {
     git(target, ['merge', '--abort'], true);
     // The work is started again from the target on retry: a fresh worktree, new tests, the approved plan kept.
