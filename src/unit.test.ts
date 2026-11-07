@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -7,6 +7,7 @@ import { parse } from 'yaml';
 import { nextReady, parseItem, setStatus } from './backlog.js';
 import { loadDefaultPolicy, mergePolicy, validate } from './config.js';
 import { verdictFails } from './engine.js';
+import { loadCases } from './eval.js';
 import { matchesAny } from './glob.js';
 import { factoryRoot } from './paths.js';
 import { claudeArgs, parseClaudeOutput } from './runtimes/claude.js';
@@ -127,4 +128,10 @@ test('verdict: pass is not taken on trust', () => {
   assert.match(verdictFails({ ...ok, criteria: [{ id: 'AC-001', status: 'not_met', evidence: 'missing' }] })!, /AC-001 not_met/);
   assert.match(verdictFails({ ...ok, findings: [{ severity: 'blocker', message: 'leaks a key' }] })!, /blocker/);
   assert.equal(verdictFails({ ...ok, findings: [{ severity: 'minor', message: 'naming' }] }), undefined);
+});
+
+test('the eval cases in this repository are valid', () => {
+  const cases = loadCases(join(factoryRoot, 'evals/cases'));
+  assert.ok(cases.length >= 6);
+  for (const c of cases) assert.ok(existsSync(join(c.dir, 'reference')), `${c.id} has a reference solution`);
 });

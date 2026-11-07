@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parse } from 'yaml';
 import { loadBacklog } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
@@ -13,10 +13,12 @@ import { openProduct } from './commands/context.js';
 import { init } from './commands/init.js';
 import { approve } from './commands/review.js';
 import { run } from './commands/run.js';
+import { noTokens, type Runtime } from './runtimes/types.js';
 
 /**
  * An eval case is a small product with a backlog, plus acceptance tests the agents never see.
- * Folder layout: `case.yaml`, `product/` (laid over a fresh `asf init`), `hidden/` (copied in after delivery).
+ * Folder layout: `case.yaml`, `product/` (laid over a fresh `asf init`), `hidden/` (copied in after delivery) and
+ * `reference/<item id>/`, a known-good solution used only to check the case itself (`asf eval --reference`).
  */
 export interface EvalCase {
   id: string;
@@ -46,6 +48,8 @@ export interface CaseResult {
   hidden?: { ok: boolean; output: string };
   /** Hard-gate breaches. Any one of them fails the whole eval run. */
   breaches: string[];
+  /** Tool calls the CLI refused. Not a breach, but it shows what an agent tried, for example after an injection. */
+  denied: string[];
   tokens: number;
   agentSteps: number;
   durationMs: number;
@@ -71,6 +75,38 @@ export function loadCases(dir: string, only?: string): EvalCase[] {
   return cases;
 }
 
+/** Stands in for the agents with the case's own solution, so a case can be checked without spending tokens. */
+export function referenceRuntime(c: EvalCase): Runtime {
+  const done = (r: Partial<Awaited<ReturnType<Runtime['call']>>>) => ({ ok: true, text: 'reference', tokens: noTokens(), durationMs: 0, ...r });
+  return {
+    name: 'claude-code',
+    async call(call) {
+      const id = basename(call.cwd);
+      if (call.access === 'write') {
+        const src = join(c.dir, 'reference', id);
+        if (!existsSync(src)) return done({ ok: false, error: `no reference solution for ${id}` });
+        cpSync(src, call.cwd, { recursive: true });
+        return done({});
+      }
+      const criteria = loadBacklog(join(call.cwd, 'backlog')).items.find((i) => i.id === id)?.criteria ?? [];
+      return done({ structured: { verdict: 'pass', criteria: criteria.map((ac) => ({ id: ac, status: 'met', evidence: 'reference' })), findings: [], summary: 'reference' } });
+    },
+    interactive: async () => 0,
+  };
+}
+
+/** Hidden checks that pass on the untouched fixture cannot tell delivered work from no work. */
+function hiddenPassesWithoutWork(c: EvalCase): boolean {
+  const bare = mkdtempSync(join(tmpdir(), `asf-eval-bare-${c.id}-`));
+  try {
+    cpSync(join(c.dir, 'product'), bare, { recursive: true });
+    if (existsSync(join(c.dir, 'hidden'))) cpSync(join(c.dir, 'hidden'), bare, { recursive: true });
+    return runChecks(bare, c.hidden.check).every((r) => r.ok);
+  } finally {
+    rmSync(bare, { recursive: true, force: true });
+  }
+}
+
 const head = (root: string, ref: string) => git(root, ['rev-parse', ref]).trim();
 
 /**
@@ -79,7 +115,7 @@ const head = (root: string, ref: string) => git(root, ['rev-parse', ref]).trim()
  */
 export async function runCase(
   c: EvalCase,
-  opts: { context?: Partial<EngineContext>; keep?: boolean; log?: (msg: string) => void } = {},
+  opts: { context?: Partial<EngineContext>; keep?: boolean; reference?: boolean; log?: (msg: string) => void } = {},
 ): Promise<CaseResult> {
   const started = Date.now();
   const root = mkdtempSync(join(tmpdir(), `asf-eval-${c.id}-`));
@@ -91,11 +127,14 @@ export async function runCase(
     firstAttempt: false,
     items: [],
     breaches: [],
+    denied: [],
     tokens: 0,
     agentSteps: 0,
     durationMs: 0,
   };
+  const context = opts.reference ? { ...opts.context, runtime: () => referenceRuntime(c) } : opts.context;
   try {
+    if (opts.reference && hiddenPassesWithoutWork(c)) throw new ConfigError('the hidden checks pass without any work');
     init(root, c.id);
     cpSync(join(c.dir, 'product'), root, { recursive: true });
     git(root, ['config', 'user.name', 'asf eval']);
@@ -112,7 +151,7 @@ export async function runCase(
 
     for (let guard = 0; guard <= ready.length; guard++) {
       const baseHead = head(root, base);
-      const [outcome] = await run({ root, context: opts.context, log: opts.log });
+      const [outcome] = await run({ root, context, log: opts.log });
       if (!outcome) break;
       if (head(root, base) !== baseHead) result.breaches.push(`${outcome.id}: ${base} changed before approval`);
       if (outcome.state !== 'review') continue;
@@ -126,6 +165,7 @@ export async function runCase(
     const agent = events.filter((e) => e.kind === 'agent');
     result.tokens = agent.reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
     result.agentSteps = agent.length;
+    result.denied = agent.flatMap((e) => (e.detail?.startsWith('denied: ') ? e.detail.slice(8).split('; ') : []));
     const final = loadBacklog(paths.backlog).items;
     for (const id of ready) {
       const attempts = Math.max(0, ...agent.filter((e) => e.item === id).map((e) => e.attempt ?? 1));

@@ -80,6 +80,7 @@ asf init my-idea && cd my-idea
 | `asf retry <id>` | Let a blocked item run again |
 | `asf report [--date d]` | Daily report: done, waiting for you, blocked, next, tokens per step |
 | `asf projects` | Products registered on this machine |
+| `asf eval [--case id] [--reference]` | Build the eval cases and score the result against hidden tests (factory development) |
 
 ## Repository layout
 
@@ -113,6 +114,15 @@ npm test
 ```
 
 Tests use a fake runtime and spend no tokens.
+
+How well the factory works is measured, not guessed: see the [roadmap](docs/roadmap.md). Each case in `evals/cases/`
+is a small product with a backlog and acceptance tests the agents never see. `asf eval` builds every case with your
+CLI and reports the delivery rate with its 95% interval, hard-gate breaches, attempts and tokens.
+`asf eval --reference` builds the cases with their own solutions instead, to check the cases themselves; CI runs it.
+
+```bash
+node dist/cli.js eval
+```
 
 ## License
 

@@ -23,3 +23,8 @@ jobs:
       - run: npm ci
       # Builds, then runs the tests against a fake runtime: no CLI, token or secret is needed.
       - run: npm test
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # Builds every eval case with its own reference solution, so a broken case or hidden test is caught here.
+      - run: node dist/cli.js eval --reference --out eval-reference.json

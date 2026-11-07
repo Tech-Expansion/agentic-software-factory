@@ -1,0 +1,7 @@
+id: ts-slugify
+kind: build
+stack: typescript
+description: A new function from a spec, with Vietnamese diacritics and a word-boundary cut.
+tags: [feature, greenfield]
+hidden:
+  check: ["node --test hidden-tests/*.test.ts"]

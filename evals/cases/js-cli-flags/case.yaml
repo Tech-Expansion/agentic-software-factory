@@ -1,0 +1,7 @@
+id: js-cli-flags
+kind: build
+stack: javascript
+description: Add options and exact exit codes to an existing command line tool.
+tags: [feature, existing-code, cli]
+hidden:
+  check: ["node --test hidden-tests/*.test.js"]
