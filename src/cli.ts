@@ -11,6 +11,7 @@ import { UsageError } from './commands/context.js';
 import { discover } from './commands/discover.js';
 import { answer, clarify, questions, type ClarifyOutcome } from './commands/clarify.js';
 import { evaluate, formatEval } from './commands/eval.js';
+import { sync } from './commands/sync.js';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
 import { approve, describe, reject, retry } from './commands/review.js';
@@ -28,6 +29,8 @@ Usage:
   asf questions                     open questions, with options and the team's recommendation
   asf answer <id> <Q> <answer>      answer one question; with --accept instead of <Q> <answer>,
                                     take the recommendation for every question left
+  asf sync                          with a tracker: take in new tickets, post questions and
+                                    results, apply the owner's answers and decisions
   asf run [--item <id>] [--all]     build the next ready item (or one, or all)
   asf show <id>                     where an item's work is and why it stopped
   asf approve <id>                  merge an item in review into the base branch
@@ -117,6 +120,11 @@ async function main(argv: string[]): Promise<number> {
       const out = await clarify({ item: values.item, again: values.again, log: (m) => console.log(m) });
       if (!out.length) console.log('no new items');
       for (const o of out) console.log(clarified(o));
+      return 0;
+    }
+    case 'sync': {
+      const out = await sync({ log: (m) => console.log(m) });
+      if (!out.length) console.log('nothing to sync');
       return 0;
     }
     case 'questions':

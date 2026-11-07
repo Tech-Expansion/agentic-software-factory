@@ -49,6 +49,10 @@
         "type": "string",
         "pattern": "^B-[0-9]{4}$"
       }
+    },
+    "tracker": {
+      "type": "string",
+      "description": "The ticket this item comes from, for example AI-12."
     }
   }
 }

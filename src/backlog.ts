@@ -13,6 +13,8 @@ export interface BacklogItem {
   spec?: string;
   criteria?: string[];
   depends_on?: string[];
+  /** The ticket this item comes from. */
+  tracker?: string;
   file: string;
   body: string;
 }

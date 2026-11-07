@@ -34,8 +34,8 @@ export function approve(id: string, root?: string): { merged: string; flags: str
 }
 
 /** Sends an item in review back with the user's reason; the next run continues from its worktree. */
-export function reject(id: string, reason: string): void {
-  const { product, state, st } = reviewItem(id);
+export function reject(id: string, reason: string, root?: string): void {
+  const { product, state, st } = reviewItem(id, root);
   if (st?.state !== 'review') throw new UsageError(`${id} is not waiting for review (${st?.state ?? 'never run'})`);
   if (!reason.trim()) throw new UsageError('give a reason: it is what the builder gets as feedback');
   state.items[id] = { ...st, state: 'rework', feedback: `Rejected by the user: ${reason}`, updated_at: new Date().toISOString() };
@@ -44,8 +44,8 @@ export function reject(id: string, reason: string): void {
 }
 
 /** Lets a blocked item run again, keeping its worktree and the last feedback. */
-export function retry(id: string): void {
-  const { product, state, st } = reviewItem(id);
+export function retry(id: string, root?: string): void {
+  const { product, state, st } = reviewItem(id, root);
   if (st?.state !== 'blocked') throw new UsageError(`${id} is not blocked (${st?.state ?? 'never run'})`);
   state.items[id] = { ...st, state: 'rework', updated_at: new Date().toISOString() };
   saveState(product.paths.state, state);

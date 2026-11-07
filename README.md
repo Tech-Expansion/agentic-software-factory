@@ -83,6 +83,7 @@ asf init my-idea && cd my-idea
 | `asf clarify [--item id] [--again]` | The analyst reads `new` items and asks only what it must know; an item with nothing blocking becomes ready |
 | `asf questions` | Open questions, with options and the team's recommendation |
 | `asf answer <id> <Q> <answer>` / `asf answer <id> --accept` | Answer a question, or take every recommendation left; the decisions go into the item, which becomes ready |
+| `asf sync` | With a tracker in `project.yaml`: take in the owner's new tickets, post questions and results, apply the owner's comments (`Q1: ...`, `/accept`, `/approve`, `/reject <reason>`, `/retry`); see [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md) |
 | `asf run [--item id] [--all]` | Build ready items unattended |
 | `asf show <id>` | Branch, worktree, why it stopped, what needs your attention |
 | `asf approve <id>` | Mark the item done and merge its branch (the only way code reaches the base branch) |

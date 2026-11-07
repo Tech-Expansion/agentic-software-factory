@@ -72,7 +72,8 @@ engineering, Kent Beck on agents and tests, Simon Willison's lethal trifecta, De
    model cannot do.
 6. **Verify like a user.** Products with a UI get end-to-end checks in a browser, which the verifier can run.
 7. **Planner and independent workers.** Parallel work only on items that do not touch the same area, no integrator
-   agent, orchestration in code. The owner decides by moving a ticket, which is unambiguous, rather than by prose.
+   agent, orchestration in code. The owner decides with a short command in a comment, which is unambiguous and says
+   who decided, rather than by prose.
 8. **Fewer round trips.** Checks run inside the builder's session before it may finish, so a failure is fixed in the
    same context, and the number of rounds stays capped.
 
@@ -108,8 +109,9 @@ again about what the ticket settles. Clarify cases join the eval set.
 ### M3. A configurable tracker
 
 A `Tracker` interface with a `local` adapter (today's `backlog/`) and a `jira` adapter over `acli`. Questions become
-comments with a `needs-po` label; the owner answers in a comment and decides by moving the ticket. Only the configured
-owner account counts; everything else in a ticket is untrusted data. Jira holds tickets and the conversation; the repo
+comments with a `needs-po` label; the owner answers and decides in comments (`/approve`, `/reject`), because a comment
+says who wrote it and a status change does not ([ADR 0005](adr/0005-tracker-through-acli-decisions-by-owner-comments.md)).
+Only the configured owner account counts; everything else in a ticket is untrusted data. Jira holds tickets and the conversation; the repo
 holds specs, criteria and code.
 
 Exit: one ticket in the AI project goes from clarification to Ready to built to merged through Jira alone.

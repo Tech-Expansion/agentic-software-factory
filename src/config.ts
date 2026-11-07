@@ -24,6 +24,17 @@ export interface ProjectConfig {
   models?: Record<string, string>;
   commands: { setup?: string[]; check: string[] };
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
+  tracker?: TrackerConfig;
+}
+
+export type TrackedState = 'clarifying' | 'ready' | 'in_progress' | 'review' | 'done' | 'blocked';
+
+export interface TrackerConfig {
+  kind: 'jira';
+  project: string;
+  owner: string;
+  intake_status?: string;
+  statuses?: Partial<Record<TrackedState, string>>;
 }
 
 export interface Policy {
