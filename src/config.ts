@@ -49,6 +49,18 @@ export interface SandboxPolicy {
 
 export class ConfigError extends Error {}
 
+const VENDOR_UNSUPPORTED = new Set(['$schema', '$id', 'title', 'minLength', 'maxLength', 'pattern', 'format', 'minItems', 'maxItems']);
+
+/**
+ * A schema as sent to a CLI's structured-output mode, which rejects some JSON Schema keywords. The runner still
+ * validates the answer against the full schema.
+ */
+export function vendorSchema(name: string): object {
+  const strip = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => !VENDOR_UNSUPPORTED.has(k)).map(([k, x]) => [k, strip(x)])) : v;
+  return strip(loadSchema(name)) as object;
+}
+
 export function loadSchema(name: string): object {
   return JSON.parse(readFileSync(join(factoryRoot, 'schemas', `${name}.schema.json`), 'utf8')) as object;
 }

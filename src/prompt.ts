@@ -72,3 +72,33 @@ export function itemPrompt(c: ItemContext): string {
   if (c.diff) out.push(`## Changes to review (against the base branch)\n\n\`\`\`diff\n${c.diff}\n\`\`\``);
   return out.join('\n\n');
 }
+
+export interface ClarifyContext {
+  root: string;
+  project: ProjectConfig;
+  item: BacklogItem;
+  /** Questions asked before and the owner's answers, which are settled. */
+  previous?: { questions: { id: string; question: string }[]; answers: Record<string, { answer: string }> };
+}
+
+/** The analyst's input: the requirement, the product around it, and what the owner already answered. */
+export function clarifyPrompt(c: ClarifyContext): string {
+  const { project, item } = c;
+  const out: string[] = [`# Product: ${project.name} (stage: ${project.stage})`];
+  if (project.hypothesis) out.push(`Hypothesis: ${project.hypothesis}`);
+  const brief = readIfExists(join(c.root, 'product', 'brief.md'));
+  if (brief) out.push(`## Product brief\n\n${brief}`);
+  const memory = readIfExists(join(c.root, '.factory', 'memory', 'context.md'));
+  if (memory) out.push(`## Project memory\n\n${memory}`);
+  out.push(`## Requirement ${item.id}: ${item.title}\n\n${item.body || '(no notes)'}`);
+  if (item.criteria?.length) out.push(`Acceptance criteria named: ${item.criteria.join(', ')}`);
+  if (item.spec) {
+    const spec = readIfExists(join(c.root, item.spec));
+    out.push(spec ? `## Spec (${item.spec})\n\n${spec}` : `Spec ${item.spec} is missing.`);
+  }
+  const answered = c.previous?.questions.filter((q) => c.previous!.answers[q.id]) ?? [];
+  if (answered.length) {
+    out.push(`## Already answered by the owner (settled; do not ask again)\n\n${answered.map((q) => `- ${q.id}. ${q.question}\n  ${c.previous!.answers[q.id]!.answer}`).join('\n')}`);
+  }
+  return out.join('\n\n');
+}

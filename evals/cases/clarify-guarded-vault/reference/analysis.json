@@ -1,0 +1,10 @@
+{
+  "understood": "A free tool for an m-of-n Cardano vault where a guardian must co-sign every payment, signed on Ledger, preprod first.",
+  "questions": [
+    { "id": "Q1", "question": "Where should the tool run: web app, browser extension, mobile or desktop?", "why": "It decides the stack and how Ledger connects.", "options": ["web app", "browser extension", "mobile", "desktop"], "recommendation": "web app", "blocking": true },
+    { "id": "Q2", "question": "The guardian must sign every payment, but losing the guardian's device must not lose the funds. Which recovery path: a backup guardian or a time-locked recovery branch?", "why": "The two rules contradict each other without one.", "options": ["backup guardian", "time lock", "both"], "recommendation": "backup guardian", "blocking": true },
+    { "id": "Q3", "question": "How do proposals and signatures pass between co-signers: a relay that stores only unsigned transactions, or files and QR codes passed by hand?", "why": "It decides whether there is a server at all.", "options": ["relay", "out of band"], "recommendation": "out of band", "blocking": true },
+    { "id": "Q4", "question": "Where does the tool read the chain from, and who pays for it?", "why": "A paid API conflicts with a free tool.", "options": ["public free API", "own node"], "recommendation": "public free API", "blocking": true }
+  ],
+  "assumptions": []
+}

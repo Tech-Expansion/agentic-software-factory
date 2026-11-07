@@ -4,29 +4,107 @@
   "title": "An eval case (evals/cases/<id>/case.yaml)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "kind", "stack", "description", "suite", "hidden"],
+  "required": [
+    "id",
+    "kind",
+    "stack",
+    "description",
+    "suite"
+  ],
   "properties": {
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "kind": { "enum": ["build"] },
-    "stack": { "type": "string", "minLength": 1 },
-    "description": { "type": "string", "minLength": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "enum": [
+        "build",
+        "clarify"
+      ]
+    },
+    "stack": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
     "suite": {
       "description": "regression: should stay near 100% and catch a version that got worse. capability: starts low and shows whether a change lets the factory do more.",
-      "enum": ["regression", "capability"]
+      "enum": [
+        "regression",
+        "capability"
+      ]
     },
-    "tags": { "type": "array", "items": { "type": "string" } },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "hidden": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["check"],
+      "required": [
+        "check"
+      ],
       "properties": {
         "check": {
           "description": "Commands run in the product root after every item is merged, with hidden/ copied in. All must pass.",
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
+    },
+    "gaps": {
+      "description": "clarify: what the requirement leaves open. The analyst never sees this list.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "gap"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gap": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "settled": {
+      "description": "clarify: what the requirement settles; a question about one of these is needless.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
+  },
+  "if": {
+    "properties": {
+      "kind": {
+        "const": "clarify"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "gaps"
+    ]
+  },
+  "else": {
+    "required": [
+      "hidden"
+    ]
   }
 }

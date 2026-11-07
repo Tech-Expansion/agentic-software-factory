@@ -1,0 +1,11 @@
+factory_version: "0.1.0"
+name: clarify-order-export
+stage: grow
+base_branch: main
+runtimes:
+  default: claude-code
+commands:
+  setup: []
+  check: ["node --test"]
+opt_ins:
+  notifications: none

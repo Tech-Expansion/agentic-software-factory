@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { loadSchema, runtimeFor, validate, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
+import { runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
@@ -33,12 +33,6 @@ interface Verdict {
   criteria: { id: string; status: 'met' | 'not_met' | 'unverified'; evidence: string }[];
   findings: { severity: 'blocker' | 'major' | 'minor'; message: string }[];
   summary: string;
-}
-
-/** Vendor structured-output modes reject some JSON Schema keywords, so the schema is sent without them. */
-function verdictSchema(): object {
-  const { $schema: _s, $id: _i, title: _t, ...rest } = loadSchema('verdict') as Record<string, unknown>;
-  return rest;
 }
 
 /** The runner does not take "pass" on trust: an unmet criterion or a blocker finding fails the item. */
@@ -121,7 +115,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
       }),
       access: step.access,
       model: project.models?.[step.role],
-      schema: step.output === 'verdict' ? verdictSchema() : undefined,
+      schema: step.output === 'verdict' ? vendorSchema('verdict') : undefined,
       allowedCommands: commands,
       deniedCommands: policy.denied_commands,
       protectedPaths: [...policy.protected_paths, ...locked],

@@ -3,7 +3,9 @@
 A local-first agentic software factory: a small team of AI agents that turns a rough idea into tested, documented
 software, using your own Claude Code or Codex subscription.
 
-You plan with the **planner** in an interactive session. After that, `asf run` builds the backlog unattended: the
+You plan with the **planner** in an interactive session, or write a rough requirement as a `new` item: the
+**analyst** reads it and asks you only what it cannot settle itself, with options and a recommendation, and the item
+is built only once you have answered. After that, `asf run` builds the backlog unattended: the
 **tester** turns an item's acceptance criteria into tests, which are then locked; the **builder** implements the item
 in its own git worktree until they pass; your product's own checks run; and a read-only **verifier** judges the result
 against the item's acceptance criteria. Nothing reaches your main branch until you run
@@ -78,6 +80,9 @@ asf init my-idea && cd my-idea
 | `asf init [dir] [--name n]` | Create a product skeleton, `git init` it and register it in `~/.agentic-software-factory` |
 | `asf discover` | Interactive planning session with the planner, in your CLI |
 | `asf validate` | Check `.factory/`, the backlog and its spec and criterion links |
+| `asf clarify [--item id] [--again]` | The analyst reads `new` items and asks only what it must know; an item with nothing blocking becomes ready |
+| `asf questions` | Open questions, with options and the team's recommendation |
+| `asf answer <id> <Q> <answer>` / `asf answer <id> --accept` | Answer a question, or take every recommendation left; the decisions go into the item, which becomes ready |
 | `asf run [--item id] [--all]` | Build ready items unattended |
 | `asf show <id>` | Branch, worktree, why it stopped, what needs your attention |
 | `asf approve <id>` | Mark the item done and merge its branch (the only way code reaches the base branch) |
@@ -85,13 +90,13 @@ asf init my-idea && cd my-idea
 | `asf retry <id>` | Let a blocked item run again |
 | `asf report [--date d]` | Daily report: done, waiting for you, blocked, next, tokens per step |
 | `asf projects` | Products registered on this machine |
-| `asf eval [--case id] [--suite s] [--trials k] [--reference]` | Build the eval cases and score the result against hidden tests (factory development) |
+| `asf eval [--case id] [--suite s] [--trials k] [--reference]` | Run the eval cases: build cases against hidden tests, clarify cases against planted gaps (factory development) |
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
-| `agents/` | Role briefs: planner, tester, builder, verifier |
+| `agents/` | Role briefs: planner, analyst, tester, builder, verifier |
 | `skills/` | Skills the steps load, one folder each |
 | `workflows/` | Steps per kind of work (`feature.yaml`) |
 | `policies/default.yaml` | What agents may not do, limits, paths that need your attention |

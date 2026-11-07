@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/analysis.schema.json",
+  "title": "The analyst's reading of a requirement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["understood", "questions", "assumptions"],
+  "properties": {
+    "understood": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the requirement asks for, in a few sentences, as the analyst understood it."
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "why", "options", "recommendation", "blocking"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^Q[0-9]+$" },
+          "question": { "type": "string", "minLength": 1 },
+          "why": { "type": "string", "minLength": 1, "description": "What goes wrong if this is guessed." },
+          "options": { "type": "array", "items": { "type": "string" } },
+          "recommendation": { "type": "string", "minLength": 1 },
+          "blocking": { "type": "boolean", "description": "True when building on a guess could waste the work or do harm." }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "What the team will take as given without asking, so the owner can object."
+    }
+  }
+}

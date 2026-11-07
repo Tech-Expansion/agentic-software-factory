@@ -105,6 +105,40 @@ test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', 
   assert.ok(existsSync(join(t, 'B-0001', 'a1-tests.jsonl')));
 });
 
+test('eval: a clarify case is scored on the gaps it covers, and nothing is built', async () => {
+  const cases = mkdtempSync(join(tmpdir(), 'asf-cases-'));
+  for (const id of ['clear', 'vague']) {
+    put(join(cases, id, 'case.yaml'), `id: ${id}\nkind: clarify\nstack: none\ndescription: d\nsuite: capability\ngaps:\n  - { id: g1, gap: platform }\n  - { id: g2, gap: recovery }\nsettled: [preprod]\n`);
+    put(join(cases, id, 'product/.factory/project.yaml'), project(id));
+    put(join(cases, id, 'product/backlog/0001-x.md'), '---\nid: B-0001\ntitle: X\nstatus: new\n---\nA wallet on preprod.\n');
+  }
+  const judged: string[] = [];
+  const rt: Runtime = {
+    name: 'claude-code',
+    async call(c): Promise<AgentResult> {
+      const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
+      if (c.systemPrompt.startsWith('You score')) {
+        judged.push(c.prompt);
+        const vague = c.cwd.includes('asf-eval-vague-');
+        const structured = { gaps: [{ id: 'g1', covered: 'asked', by: ['Q1'] }, { id: 'g2', covered: vague ? 'missed' : 'assumed', by: [] }], needless: vague ? [{ question: 'Q2', reason: 'preprod is settled' }] : [] };
+        return { ok: true, text: '', structured, tokens, durationMs: 1 };
+      }
+      assert.equal(c.access, 'read', 'only the analyst and the judge run');
+      const structured = { understood: 'a wallet', questions: [{ id: 'Q1', question: 'Which platform?', why: 'stack', options: [], recommendation: 'web', blocking: true }], assumptions: ['recovery by a backup key'] };
+      return { ok: true, text: '', structured, tokens, durationMs: 1 };
+    },
+    interactive: async () => 0,
+  };
+  const r = await evaluate({ cases, context: { runtime: () => rt } });
+  const [clear, vague] = r.cases;
+  assert.deepEqual(clear?.clarify, { gaps: 2, asked: 1, assumed: 1, missed: [], needless: [], questions: 1 });
+  assert.equal(clear?.delivered, true, clear?.error);
+  assert.equal(clear?.tokens, 2, 'the judge is not counted as the factory');
+  assert.deepEqual(vague?.clarify?.missed, ['g2']);
+  assert.equal(vague?.delivered, false);
+  assert.match(judged[0]!, /g2: recovery[\s\S]*- preprod[\s\S]*Q1 \[blocking\]: Which platform\?[\s\S]*A1: recovery by a backup key/);
+});
+
 test('eval: an invalid case is refused before anything runs', async () => {
   const cases = mkdtempSync(join(tmpdir(), 'asf-cases-'));
   put(join(cases, 'x', 'case.yaml'), 'id: y\nkind: build\nstack: s\ndescription: d\nsuite: regression\nhidden:\n  check: ["true"]\n');

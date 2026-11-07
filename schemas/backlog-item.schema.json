@@ -19,7 +19,9 @@
       "minLength": 1
     },
     "status": {
+      "description": "new: waiting for clarification. draft: parked by the owner. ready: clear to build. done: merged.",
       "enum": [
+        "new",
         "draft",
         "ready",
         "done"

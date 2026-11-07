@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/clarify-judgement.schema.json",
+  "title": "A judge's scoring of an analyst's questions against an eval case's gaps",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "gaps",
+    "needless"
+  ],
+  "properties": {
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "covered",
+          "by"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "covered": {
+            "enum": [
+              "asked",
+              "assumed",
+              "missed"
+            ],
+            "description": "asked: a question settles it. assumed: an assumption states how it will be handled. missed: neither."
+          },
+          "by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the questions (Q1) or assumptions (A1) that cover it."
+          }
+        }
+      }
+    },
+    "needless": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question",
+          "reason"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Where the requirement already answers it."
+          }
+        }
+      }
+    }
+  }
+}

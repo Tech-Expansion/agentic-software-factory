@@ -1,0 +1,10 @@
+{
+  "understood": "An admin-only CSV export of orders for the accountant, with fixed columns and format.",
+  "questions": [
+    { "id": "Q1", "question": "Which orders go into one export: a date range the admin picks, the last month, or everything?", "why": "It decides the UI and the size.", "options": ["date range", "last month", "all"], "recommendation": "date range", "blocking": true },
+    { "id": "Q2", "question": "Are cancelled and refunded orders included?", "why": "Accounting totals differ.", "options": ["included with their status", "left out"], "recommendation": "included with their status", "blocking": true },
+    { "id": "Q3", "question": "Are dates exported in Vietnam time (UTC+7), so an order at 23:30 Vietnam time counts on that day?", "why": "Orders near midnight land on another day in UTC.", "options": ["Vietnam time", "UTC"], "recommendation": "Vietnam time", "blocking": true },
+    { "id": "Q4", "question": "For a large export, is a direct download acceptable, or should it be prepared in the background and offered when ready?", "why": "400,000 rows may time out.", "options": ["direct download", "background job"], "recommendation": "background job above 50,000 rows", "blocking": true }
+  ],
+  "assumptions": []
+}

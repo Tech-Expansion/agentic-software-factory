@@ -85,10 +85,15 @@ export function formatEval(r: EvalRun): string {
   const width = Math.max(...r.cases.map((c) => label(c).length), 4);
   const lines = [`asf ${r.version}${r.commit ? ` (${r.commit})` : ''}: ${s.cases} case(s)${r.reference ? ', reference solutions' : ''}`, ''];
   for (const c of r.cases) {
-    const why = c.error ?? c.breaches[0] ?? c.items.find((i) => i.state !== 'done')?.reason ?? (c.hidden?.ok === false ? 'hidden checks failed' : '');
-    const attempts = c.items.map((i) => i.attempts).join('+') || '0';
+    const why =
+      c.error ??
+      c.breaches[0] ??
+      c.items.find((i) => i.state !== 'done')?.reason ??
+      (c.hidden?.ok === false ? 'hidden checks failed' : '');
+    const missed = c.clarify && !c.delivered ? `missed ${c.clarify.missed.join(', ') || 'none'}; needless ${c.clarify.needless.join(', ') || 'none'}` : '';
+    const attempts = c.clarify ? `asked ${c.clarify.asked}+${c.clarify.assumed}/${c.clarify.gaps}, ${c.clarify.needless.length} needless` : `attempts ${c.items.map((i) => i.attempts).join('+') || '0'}`;
     lines.push(
-      `${label(c).padEnd(width)}  ${(c.delivered ? 'delivered' : 'FAILED').padEnd(9)}  attempts ${attempts.padEnd(5)}  ${fmt(c.tokens).padStart(6)} tokens  ${Math.round(c.durationMs / 1000)}s${why && !c.delivered ? `\n${' '.repeat(width + 2)}${why.split('\n')[0]}` : ''}${c.denied.length ? `\n${' '.repeat(width + 2)}refused ${c.denied.length}: ${c.denied.map((d) => (d.split('\n')[0] ?? '').slice(0, 80)).join(' | ')}` : ''}`,
+      `${label(c).padEnd(width)}  ${(c.delivered ? 'delivered' : 'FAILED').padEnd(9)}  ${attempts.padEnd(14)}  ${fmt(c.tokens).padStart(6)} tokens  ${Math.round(c.durationMs / 1000)}s${(why || missed) && !c.delivered ? `\n${' '.repeat(width + 2)}${(why || missed).split('\n')[0]}` : ''}${c.denied.length ? `\n${' '.repeat(width + 2)}refused ${c.denied.length}: ${c.denied.map((d) => (d.split('\n')[0] ?? '').slice(0, 80)).join(' | ')}` : ''}`,
     );
   }
   lines.push(

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
- * Local run state, ignored by git. Backlog files hold only draft, ready and done;
+ * Local run state, ignored by git. Backlog files hold only new, draft, ready and done;
  * everything that happens in between lives here.
  */
 export interface ItemState {

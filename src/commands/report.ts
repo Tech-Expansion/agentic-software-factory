@@ -30,6 +30,8 @@ export function report(date: string = day(new Date().toISOString())): string {
   section('Next', ready.slice(0, 5));
   const drafts = items.filter((i) => i.status === 'draft').length;
   if (drafts) out.push(`${drafts} item(s) still in draft: run \`asf discover\` to finish planning them.`, '');
+  const fresh = items.filter((i) => i.status === 'new').length;
+  if (fresh) out.push(`${fresh} item(s) waiting for clarification: \`asf questions\`.`, '');
 
   const agent = events.filter((e) => e.kind === 'agent');
   const total = agent.reduce((n, e) => n + (e.tokens?.total ?? 0), 0);

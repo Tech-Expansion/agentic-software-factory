@@ -2,3 +2,4 @@
 .factory/runs/
 .factory/worktrees/
 .factory/state.json
+.factory/clarify/

@@ -9,6 +9,7 @@ import { factoryHome } from './paths.js';
 import { version } from './version.js';
 import { UsageError } from './commands/context.js';
 import { discover } from './commands/discover.js';
+import { answer, clarify, questions, type ClarifyOutcome } from './commands/clarify.js';
 import { evaluate, formatEval } from './commands/eval.js';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
@@ -22,6 +23,11 @@ Usage:
   asf init [dir] [--name <name>]    create a product skeleton and register it
   asf discover                      plan with the planner: brief, specs, backlog
   asf validate                      check settings, policy, backlog and spec links
+  asf clarify [--item <id>] [--again]
+                                    the analyst reads new items and asks what it needs to know
+  asf questions                     open questions, with options and the team's recommendation
+  asf answer <id> <Q> <answer>      answer one question; with --accept instead of <Q> <answer>,
+                                    take the recommendation for every question left
   asf run [--item <id>] [--all]     build the next ready item (or one, or all)
   asf show <id>                     where an item's work is and why it stopped
   asf approve <id>                  merge an item in review into the base branch
@@ -35,6 +41,12 @@ Usage:
                                     k times each for pass^k; --reference checks the cases with
                                     their own solutions
 `;
+
+function clarified(o: ClarifyOutcome): string {
+  if (o.ready) return `${o.id} is ready to build`;
+  if (o.open) return `${o.id}: ${o.open} blocking question(s) open; see \`asf questions\``;
+  return `${o.id}: clear, but not made ready: ${o.note}`;
+}
 
 async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -52,6 +64,8 @@ async function main(argv: string[]): Promise<number> {
       out: { type: 'string' },
       keep: { type: 'boolean' },
       reference: { type: 'boolean' },
+      again: { type: 'boolean' },
+      accept: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
@@ -99,6 +113,21 @@ async function main(argv: string[]): Promise<number> {
       reject(need(0, 'item id'), args.slice(1).join(' '));
       console.log('sent back; it runs again on the next `asf run`');
       return 0;
+    case 'clarify': {
+      const out = await clarify({ item: values.item, again: values.again, log: (m) => console.log(m) });
+      if (!out.length) console.log('no new items');
+      for (const o of out) console.log(clarified(o));
+      return 0;
+    }
+    case 'questions':
+      console.log(questions());
+      return 0;
+    case 'answer': {
+      const id = need(0, 'item id');
+      const o = values.accept ? answer(id, undefined, '', { accept: true }) : answer(id, need(1, 'question id (Q1, ...)'), args.slice(2).join(' '));
+      console.log(clarified(o));
+      return 0;
+    }
     case 'retry':
       retry(need(0, 'item id'));
       console.log('it runs again on the next `asf run`');
