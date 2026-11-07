@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { EngineContext } from '../engine.js';
+import { LIMIT, type EngineContext } from '../engine.js';
 import { ConfigError } from '../config.js';
 import { loadCases, runCase, summarize, type CaseResult, type EvalSummary } from '../eval.js';
 import { git } from '../git.js';
@@ -28,6 +28,8 @@ export interface EvalOptions {
 }
 
 export interface EvalRun {
+  /** Set when a usage limit cut the run short. Its numbers measure the quota, not the factory: never a baseline. */
+  incomplete?: string;
   /** Set when the run used another workflow or left steps out, so it is never compared with a baseline as is. */
   workflow?: string;
   version: string;
@@ -60,8 +62,9 @@ export async function evaluate(opts: EvalOptions = {}): Promise<EvalRun> {
   const saved = process.env.ASF_HOME;
   process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-eval-home-'));
   const results: CaseResult[] = [];
+  let incomplete: string | undefined;
   try {
-    for (const c of cases) {
+    outer: for (const c of cases) {
       for (let trial = 1; trial <= trials; trial++) {
         log(`== ${c.id} (${c.stack}, ${c.suite})${trials > 1 ? ` trial ${trial}/${trials}` : ''}`);
         const r = await runCase(c, {
@@ -72,6 +75,12 @@ export async function evaluate(opts: EvalOptions = {}): Promise<EvalRun> {
           transcripts: join(transcripts, `${c.id}-t${trial}`),
           log: (m) => log(`   ${m}`),
         });
+        const limited = r.items.find((i) => i.state === 'paused')?.reason ?? (r.error && LIMIT.test(r.error) ? r.error : undefined);
+        if (limited) {
+          incomplete = `stopped at ${c.id} trial ${trial} by a usage limit: ${limited.split('\n')[0]}`;
+          log(`   ${incomplete}`);
+          break outer;
+        }
         results.push(r);
         log(`   ${r.delivered ? 'delivered' : 'NOT delivered'}${r.error ? `: ${r.error}` : ''}${r.root ? ` (kept in ${r.root})` : ''}`);
       }
@@ -81,7 +90,7 @@ export async function evaluate(opts: EvalOptions = {}): Promise<EvalRun> {
     else process.env.ASF_HOME = saved;
   }
   const commit = git(factoryRoot, ['rev-parse', '--short', 'HEAD'], true).trim() || undefined;
-  const out: EvalRun = { version, workflow: ablation, reference: !!opts.reference, commit, at, summary: summarize(results), cases: results, file };
+  const out: EvalRun = { version, incomplete, workflow: ablation, reference: !!opts.reference, commit, at, summary: summarize(results), cases: results, file };
   mkdirSync(dirname(file), { recursive: true });
   const { file: _f, ...data } = out;
   writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
@@ -115,6 +124,7 @@ export function formatEval(r: EvalRun): string {
     `hard-gate breaches ${s.breaches}${s.errors ? `, errors ${s.errors}` : ''}`,
     `tokens per case: median ${fmt(s.tokensMedian)}, p90 ${fmt(s.tokensP90)}`,
     `results: ${r.file}`,
+    ...(r.incomplete ? [`INCOMPLETE, not a baseline: ${r.incomplete}`] : []),
   );
   return lines.join('\n');
 }

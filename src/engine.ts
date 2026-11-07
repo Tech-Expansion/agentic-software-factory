@@ -46,10 +46,13 @@ interface Verdict {
 }
 
 /** True when a failed call hit the subscription's usage limit rather than something a person must fix. */
+/** How the CLIs word a subscription or API limit, for when no rate-limit event says so. */
+export const LIMIT = /usage limit|rate limit|too many requests|\b429\b|quota|hit your [\w -]*limit/i;
+
 export function rateLimited(r: AgentResult): boolean {
   const status = r.rateLimit?.status;
   if (status && status !== 'allowed' && status !== 'allowed_warning') return true;
-  return /usage limit|rate limit|too many requests|\b429\b|quota/i.test(r.error ?? '');
+  return LIMIT.test(r.error ?? '');
 }
 
 const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'tech-lead', skills: ['plan-change'], access: 'read' };

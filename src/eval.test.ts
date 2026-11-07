@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { evaluate } from './commands/eval.js';
+import { evaluate, formatEval } from './commands/eval.js';
 import { wilson } from './eval.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
@@ -103,6 +103,29 @@ test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', 
   assert.match(t, /r-transcripts\/flaky-t1$/);
   assert.equal(readFileSync(join(t, 'B-0001', 'a1-build.jsonl'), 'utf8'), '{"type":"result"}\n');
   assert.ok(existsSync(join(t, 'B-0001', 'a1-tests.jsonl')));
+});
+
+test('eval: a usage limit stops the run, which is marked incomplete and never scored as failures', async () => {
+  const cases = mkdtempSync(join(tmpdir(), 'asf-cases-'));
+  makeCase(cases, 'a-first');
+  makeCase(cases, 'b-limited');
+  makeCase(cases, 'c-never');
+  const good = fake(() => 'hi');
+  let ran = 0;
+  const rt: Runtime = {
+    name: 'claude-code',
+    async call(c): Promise<AgentResult> {
+      ran++;
+      if (c.cwd.includes('asf-eval-a-first-')) return good.call(c);
+      return { ok: false, text: '', tokens: { input: 0, cached_input: 0, output: 0, total: 0 }, durationMs: 1, error: "You've hit your 5-hour limit · resets 4:10pm" };
+    },
+    interactive: async () => 0,
+  };
+  const r = await evaluate({ cases, trials: 2, out: join(mkdtempSync(join(tmpdir(), 'asf-out-')), 'r.json'), context: { runtime: () => rt } });
+  assert.deepEqual(r.cases.map((c) => `${c.id}#${c.trial}`), ['a-first#1', 'a-first#2']);
+  assert.match(r.incomplete!, /^stopped at b-limited trial 1 by a usage limit: paused by a usage limit in tests: You've hit your 5-hour limit/);
+  assert.match(formatEval(r), /INCOMPLETE, not a baseline/);
+  assert.equal(ran, 6 + 2, 'two full runs, then the limited case twice (run retries a paused item once), then nothing');
 });
 
 test('eval: a clarify case is scored on the gaps it covers, and nothing is built', async () => {

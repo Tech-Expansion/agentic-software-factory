@@ -231,7 +231,7 @@ async function main(argv: string[]): Promise<number> {
         log: (m) => console.log(m),
       });
       console.log(`\n${formatEval(r)}`);
-      return r.summary.breaches || r.summary.errors ? 2 : 0;
+      return r.summary.breaches || r.summary.errors ? 2 : r.incomplete ? 3 : 0;
     }
     default:
       throw new UsageError(`unknown command: ${cmd}\n\n${HELP}`);
