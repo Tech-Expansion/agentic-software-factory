@@ -9,10 +9,10 @@ export interface ExecResult {
 }
 
 /** Runs a command with `input` on stdin, then closes stdin. Never goes through a shell. */
-export function exec(cmd: string, args: string[], opts: { cwd: string; input: string; timeoutMs: number }): Promise<ExecResult> {
+export function exec(cmd: string, args: string[], opts: { cwd: string; input: string; timeoutMs: number; env?: NodeJS.ProcessEnv }): Promise<ExecResult> {
   const started = Date.now();
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let timedOut = false;

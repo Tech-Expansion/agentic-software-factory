@@ -8,6 +8,8 @@ import { wilson } from './eval.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
+// These tests are about the engine's logic; sandbox.test.ts covers the sandbox.
+process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 
 const put = (file: string, text: string) => {
   mkdirSync(dirname(file), { recursive: true });

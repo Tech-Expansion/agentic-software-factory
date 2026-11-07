@@ -4,9 +4,10 @@ import { basename, join } from 'node:path';
 import { parse } from 'yaml';
 import { loadBacklog } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { ConfigError, validate } from './config.js';
+import { ConfigError, loadPolicy, validate } from './config.js';
 import type { EngineContext } from './engine.js';
 import { git } from './git.js';
+import { productPaths } from './paths.js';
 import { matchesAny } from './glob.js';
 import { readEvents } from './runlog.js';
 import { openProduct } from './commands/context.js';
@@ -101,7 +102,7 @@ function hiddenPassesWithoutWork(c: EvalCase): boolean {
   try {
     cpSync(join(c.dir, 'product'), bare, { recursive: true });
     if (existsSync(join(c.dir, 'hidden'))) cpSync(join(c.dir, 'hidden'), bare, { recursive: true });
-    return runChecks(bare, c.hidden.check).every((r) => r.ok);
+    return runChecks(bare, c.hidden.check, loadPolicy(productPaths(bare)).sandbox).every((r) => r.ok);
   } finally {
     rmSync(bare, { recursive: true, force: true });
   }
@@ -178,7 +179,7 @@ export async function runCase(
     }
 
     if (existsSync(join(c.dir, 'hidden'))) cpSync(join(c.dir, 'hidden'), root, { recursive: true });
-    const checks = runChecks(root, c.hidden.check);
+    const checks = runChecks(root, c.hidden.check, policy.sandbox);
     result.hidden = { ok: checks.every((r) => r.ok), output: formatChecks(checks) };
     const allDone = result.items.every((i) => i.state === 'done');
     result.delivered = allDone && result.hidden.ok && !result.breaches.length;

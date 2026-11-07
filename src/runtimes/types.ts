@@ -1,4 +1,4 @@
-import type { RuntimeName } from '../config.js';
+import type { RuntimeName, SandboxPolicy } from '../config.js';
 import type { Tokens } from '../runlog.js';
 
 export interface AgentCall {
@@ -15,7 +15,20 @@ export interface AgentCall {
   allowedCommands: string[];
   deniedCommands: string[];
   protectedPaths: string[];
+  /** Run the agent's commands in the sandbox. Unset only in tests and when the operator turned it off. */
+  sandbox?: SandboxPolicy;
+  /** Claude Code hooks, for example a Stop hook that runs the checks before the agent may finish. */
+  hooks?: object;
   timeoutMs?: number;
+}
+
+export interface RateLimit {
+  /** "allowed" while work can go on. */
+  status: string;
+  /** Unix seconds. */
+  resetsAt?: number;
+  /** 0 to 1, for the window that is closest to its limit. */
+  utilization?: number;
 }
 
 export interface AgentResult {
@@ -28,6 +41,9 @@ export interface AgentResult {
   error?: string;
   /** Tool calls the CLI refused, for example a command outside the allowed list. */
   denied?: string[];
+  /** Everything the CLI printed as events, kept for error analysis. */
+  transcript?: string;
+  rateLimit?: RateLimit;
 }
 
 export interface InteractiveCall {

@@ -42,6 +42,9 @@ flowchart LR
 
 - Node.js 22 or later, and git.
 - Claude Code and/or Codex installed and signed in. A different vendor as verifier is recommended.
+- Anthropic's sandbox runtime, `npm install -g @anthropic-ai/sandbox-runtime`, and on Linux `bubblewrap` and
+  `socat`. Agent commands and checks run sandboxed and refuse to run without it; see
+  [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 
 ## Install from source
 
@@ -100,8 +103,9 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code, 
 
 ## Known limits
 
-- No container isolation yet: a builder can reach whatever its CLI's sandbox allows. Do not run ideas you do not
-  trust. See [ADR 0003](docs/adr/0003-runner.md).
+- Agent commands and checks run in a sandbox with no credentials and network only to package registries, not in a
+  container. Codex has no network but can read what its user can; the secret scan before each commit is the
+  backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
 - Only the feature workflow exists. Learning from the run log, deployment and external trackers are not built yet.
 - A builder call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),

@@ -2,11 +2,12 @@ import { join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
 import { loadSchema, runtimeFor, validate, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
-import { commitAll, ensureWorktree, restorePaths, stagedDiff, stageAndList } from './git.js';
+import { commitAll, ensureWorktree, git, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
+import { findSecrets, testTampering } from './integrity.js';
 import type { ProductPaths } from './paths.js';
 import { itemPrompt, systemPrompt } from './prompt.js';
-import { appendEvent, type RunEvent } from './runlog.js';
+import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
 import type { Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
 import { loadWorkflow, type Workflow } from './workflow.js';
@@ -92,7 +93,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   log(`${item.id} started in ${worktree}`);
 
   if (fresh && project.commands.setup?.length) {
-    const setup = runChecks(worktree, project.commands.setup);
+    const setup = runChecks(worktree, project.commands.setup, policy.sandbox);
     event({ step: 'setup', kind: 'checks', outcome: setup.every((r) => r.ok) ? 'passed' : 'failed' });
     if (!setup.every((r) => r.ok)) return finish('blocked', `setup failed:\n${formatChecks(setup)}`);
   }
@@ -106,7 +107,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
 
     for (const step of workflow.steps) {
       if (step.kind === 'checks') {
-        const results = runChecks(worktree, project.commands.check);
+        const results = runChecks(worktree, project.commands.check, policy.sandbox);
         const ok = results.every((r) => r.ok);
         checksText = formatChecks(results);
         event({ attempt, step: step.id, kind: 'checks', outcome: ok ? 'passed' : 'failed', duration_ms: results.reduce((n, r) => n + r.durationMs, 0) });
@@ -141,7 +142,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         allowedCommands: commands,
         deniedCommands: policy.denied_commands,
         protectedPaths: policy.protected_paths,
+        sandbox: policy.sandbox,
       });
+      if (result.transcript) saveTranscript(paths.runs, item.id, `a${attempt}-${step.id}`, result.transcript);
       st.tokens += result.tokens.total;
       event({
         attempt,
@@ -173,6 +176,11 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
           failed = 'No file was changed.';
           break;
         }
+        const tampered = testTampering(worktree, base, policy.test_paths);
+        if (tampered.length) {
+          failed = `Tests may not be deleted, skipped or focused to get an item through. Undo this, and fix the code instead (if a test is wrong, say so in your summary):\n${tampered.map((t) => `- ${t}`).join('\n')}`;
+          break;
+        }
         st.summary = result.text.slice(0, 4000);
       }
 
@@ -192,6 +200,14 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         restorePaths(worktree, base, late);
         return finish('blocked', `protected files changed outside a build step: ${late.join(', ')}`);
       }
+      const secrets = findSecrets(git(worktree, ['diff', '--cached', '-U0', base]), policy.secret_patterns);
+      if (secrets.length) {
+        failed = `The change contains what looks like a secret. Remove it; credentials never go into the repository:\n${secrets.map((x) => `- ${x}`).join('\n')}`;
+      }
+    }
+
+    if (!failed) {
+      const changed = stageAndList(worktree, base);
       const flags = changed.filter((f) => matchesAny(f, policy.approval_paths));
       commitAll(worktree, `feat: ${item.title}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
       st.feedback = undefined;

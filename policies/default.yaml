@@ -1,4 +1,5 @@
-# Default policy. A product's .factory/policy.yaml can only tighten it.
+# Default policy. A product's .factory/policy.yaml can only tighten it, with one exception: sandbox.network_allow
+# adds the hosts a product needs. The owner edits that file; agents cannot (it is under .factory/).
 max_attempts: 3
 max_tokens_per_item: 3000000
 denied_commands:
@@ -13,6 +14,8 @@ denied_commands:
   - sudo
   - curl
   - wget
+  - npm publish
+  - dotnet nuget push
 approval_paths:
   - "**/package.json"
   - "**/*.csproj"
@@ -30,3 +33,67 @@ protected_paths:
   - "product/**"
   - "specs/**"
   - "backlog/**"
+# Changes here are approved by the owner one by one, plan first: keys, signing, money, auth.
+sensitive_paths: []
+# Test files. Deleting one, or adding a skip to one, sends the item back to the builder.
+test_paths:
+  - "**/*.test.*"
+  - "**/*.spec.*"
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/__tests__/**"
+  - "**/*Tests.cs"
+  - "**/*Test.cs"
+  - "**/test_*.py"
+  - "**/*_test.py"
+  - "**/*_test.go"
+# Extra regular expressions for secrets. Added lines that match one never get committed.
+secret_patterns: []
+# Agent commands and checks run in a sandbox (Claude Code's own for agents, srt for checks). It fails closed.
+sandbox:
+  # The only hosts sandboxed commands can reach. Registries need no credentials to read.
+  network_allow:
+    - registry.npmjs.org
+    - api.nuget.org
+    - "*.nuget.org"
+    - pypi.org
+    - files.pythonhosted.org
+    - proxy.golang.org
+  # Never readable by agents or checks.
+  deny_read:
+    - "~/.ssh"
+    - "~/.claude"
+    - "~/.codex"
+    - "~/.config"
+    - "~/.aws"
+    - "~/.azure"
+    - "~/.kube"
+    - "~/.docker"
+    - "~/.gnupg"
+    - "~/.netrc"
+    - "~/.npmrc"
+    - "~/.agentic-software-factory"
+  # Writable besides the worktree and the temp directory: package caches.
+  write_allow:
+    - "~/.npm"
+    - "~/.nuget"
+    - "~/.local/share/NuGet"
+    - "~/.dotnet"
+    - "~/.cache"
+  # Removed from the environment of agent commands and checks. Names that look like secrets are removed too.
+  secret_env:
+    - CLAUDE_CODE_OAUTH_TOKEN
+    - ANTHROPIC_API_KEY
+    - OPENAI_API_KEY
+    - CODEX_API_KEY
+    - GITHUB_TOKEN
+    - GH_TOKEN
+    - NPM_TOKEN
+    - JIRA_API_TOKEN
+    - ATLASSIAN_API_TOKEN
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
+  # Listening and connecting on loopback. On Linux the sandbox has its own loopback; on macOS this opens every local
+  # port of the host, so a product turns it on only when its tests need it (.NET test runs do).
+  local_binding: false

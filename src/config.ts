@@ -32,6 +32,19 @@ export interface Policy {
   denied_commands: string[];
   approval_paths: string[];
   protected_paths: string[];
+  sensitive_paths: string[];
+  test_paths: string[];
+  secret_patterns: string[];
+  sandbox: SandboxPolicy;
+}
+
+export interface SandboxPolicy {
+  network_allow: string[];
+  deny_read: string[];
+  write_allow: string[];
+  secret_env: string[];
+  /** Lets sandboxed processes listen and connect on loopback (test runners that talk over a local socket). */
+  local_binding: boolean;
 }
 
 export class ConfigError extends Error {}
@@ -75,7 +88,7 @@ export function loadDefaultPolicy(): Policy {
 }
 
 /** A product policy can only tighten the default: limits take the lower value, lists are added to. */
-export function mergePolicy(base: Policy, override: Partial<Policy>): Policy {
+export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbox'>> & { sandbox?: Partial<SandboxPolicy> }): Policy {
   const union = (a: string[], b: string[] | undefined) => [...new Set([...a, ...(b ?? [])])];
   return {
     max_attempts: Math.min(base.max_attempts, override.max_attempts ?? Infinity),
@@ -83,6 +96,17 @@ export function mergePolicy(base: Policy, override: Partial<Policy>): Policy {
     denied_commands: union(base.denied_commands, override.denied_commands),
     approval_paths: union(base.approval_paths, override.approval_paths),
     protected_paths: union(base.protected_paths, override.protected_paths),
+    sensitive_paths: union(base.sensitive_paths, override.sensitive_paths),
+    test_paths: union(base.test_paths, override.test_paths),
+    secret_patterns: union(base.secret_patterns, override.secret_patterns),
+    sandbox: {
+      // The one list a product widens: the hosts it needs. Only the owner can edit .factory/policy.yaml.
+      network_allow: union(base.sandbox.network_allow, override.sandbox?.network_allow),
+      deny_read: union(base.sandbox.deny_read, override.sandbox?.deny_read),
+      write_allow: base.sandbox.write_allow,
+      secret_env: union(base.sandbox.secret_env, override.sandbox?.secret_env),
+      local_binding: base.sandbox.local_binding || (override.sandbox?.local_binding ?? false),
+    },
   };
 }
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
@@ -14,6 +14,8 @@ import { loadState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
+// These tests are about the engine's logic; sandbox.test.ts covers the sandbox.
+process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'asf test';
 process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.invalid';
 
@@ -116,6 +118,32 @@ test('a protected change made during review never reaches the commit', async () 
   const wt = join(root, '.factory/worktrees/B-0001');
   assert.match(readFileSync(join(wt, 'specs/hello.md'), 'utf8'), /AC-001/);
   assert.equal(git(wt, ['rev-parse', 'HEAD']).trim(), git(root, ['rev-parse', 'main']).trim(), 'nothing was committed');
+});
+
+test('a change with a secret in it is sent back and never committed', async () => {
+  const key = ['ghp', 'A'.repeat(36)].join('_');
+  const rt = fake((c, n) => (c.access === 'write' ? { write: { 'hello.txt': n === 1 ? `token ${key}\n` : 'hi\n' } } : { structured: verdict(true) }));
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  const retry = rt.calls.find((c, i) => i > 0 && c.access === 'write');
+  assert.match(retry!.prompt, /looks like a secret[\s\S]*hello\.txt:1: GitHub token/);
+  assert.ok(!retry!.prompt.includes(key), 'the value itself is never repeated');
+  const log = git(root, ['log', '-p', '--all']);
+  assert.ok(!log.includes(key), 'the secret is in no commit');
+});
+
+test('deleting a test to get through is sent back', async () => {
+  writeFileSync(join(root, 'hello.test.js'), "test('x', () => {});\n");
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'a test']);
+  const rt = fake((c, n) => {
+    if (c.access === 'write' && n === 1) rmSync(join(c.cwd, 'hello.test.js'));
+    if (c.access === 'write' && n > 1) writeFileSync(join(c.cwd, 'hello.test.js'), "test('x', () => {});\n");
+    return c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(true) };
+  });
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  assert.match(rt.calls[1]!.prompt, /deleted test file hello\.test\.js/);
 });
 
 test('a runtime error blocks at once instead of retrying', async () => {

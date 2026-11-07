@@ -31,6 +31,16 @@ test('policy: a product policy can only tighten the default', () => {
   assert.ok(merged.denied_commands.includes('npm publish'));
 });
 
+test('policy: the sandbox widens only where the owner says so, and never its writable paths', () => {
+  const base = loadDefaultPolicy();
+  assert.equal(base.sandbox.local_binding, false);
+  const merged = mergePolicy(base, { sandbox: { local_binding: true, network_allow: ['preprod.koios.rest'], write_allow: ['~'] } });
+  assert.equal(merged.sandbox.local_binding, true);
+  assert.ok(merged.sandbox.network_allow.includes('preprod.koios.rest'));
+  assert.deepEqual(merged.sandbox.write_allow, base.sandbox.write_allow);
+  assert.equal(mergePolicy(base, { sandbox: { local_binding: false } }).sandbox.local_binding, false);
+});
+
 test('template project.yaml is valid once filled in', () => {
   const text = readFileSync(join(factoryRoot, 'templates/product/.factory/project.yaml'), 'utf8')
     .replaceAll('{{name}}', 'demo')
