@@ -8,8 +8,9 @@ You plan with the **planner** in an interactive session, or write a rough requir
 is built only once you have answered. After that, `asf run` builds the backlog unattended: the
 **tester** turns an item's acceptance criteria into tests, which are then locked; the **builder** implements the item
 in its own git worktree until they pass; your product's own checks run; and a read-only **verifier** judges the result
-against the item's acceptance criteria. Nothing reaches your main branch until you run
-`asf approve`.
+against the item's acceptance criteria. Nothing reaches your main branch until you approve it:
+item by item with `asf approve`, or, with an integration branch, in batches with `asf release`, while changes to
+sensitive paths and high-risk items still wait for you one by one.
 
 > Status: 0.1, experimental. The first vertical slice works end to end with Claude Code 2.1 and codex-cli 0.147.
 > Not yet published to npm.
@@ -86,7 +87,8 @@ asf init my-idea && cd my-idea
 | `asf sync` | With a tracker in `project.yaml`: take in the owner's new tickets, post questions and results, apply the owner's comments (`Q1: ...`, `/accept`, `/approve`, `/reject <reason>`, `/retry`); see [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md) |
 | `asf run [--item id] [--all]` | Build ready items unattended |
 | `asf show <id>` | Branch, worktree, why it stopped, what needs your attention |
-| `asf approve <id>` | Mark the item done and merge its branch (the only way code reaches the base branch) |
+| `asf approve <id>` | Approve a high-risk item's plan, or mark an item done and merge its branch: into the integration branch when `project.yaml` has one, otherwise into the base branch |
+| `asf release [--dry]` | Merge the integration branch into the base branch, as one batch ([ADR 0006](docs/adr/0006-integration-branch-and-batch-releases.md)) |
 | `asf reject <id> <reason>` | Send it back; the reason becomes the builder's feedback |
 | `asf retry <id>` | Let a blocked item run again |
 | `asf report [--date d]` | Daily report: done, waiting for you, blocked, next, tokens per step |

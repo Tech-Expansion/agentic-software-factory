@@ -14,7 +14,7 @@ import { evaluate, formatEval } from './commands/eval.js';
 import { sync } from './commands/sync.js';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
-import { approve, describe, reject, retry } from './commands/review.js';
+import { approve, describe, reject, release, releasable, retry } from './commands/review.js';
 import { run } from './commands/run.js';
 import { validateProduct } from './commands/validate.js';
 
@@ -33,7 +33,9 @@ Usage:
                                     results, apply the owner's answers and decisions
   asf run [--item <id>] [--all]     build the next ready item (or one, or all)
   asf show <id>                     where an item's work is and why it stopped
-  asf approve <id>                  merge an item in review into the base branch
+  asf approve <id>                  approve a plan, or merge an item in review (into the
+                                    integration branch when there is one)
+  asf release [--dry]               merge the integration branch into the base branch
   asf reject <id> <reason>          send an item in review back with feedback
   asf retry <id>                    let a blocked item run again
   asf report [--date YYYY-MM-DD]    daily report
@@ -68,6 +70,7 @@ async function main(argv: string[]): Promise<number> {
       keep: { type: 'boolean' },
       reference: { type: 'boolean' },
       again: { type: 'boolean' },
+      dry: { type: 'boolean' },
       accept: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -109,7 +112,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     case 'approve': {
       const r = approve(need(0, 'item id'));
-      console.log(`merged ${r.merged}`);
+      console.log(r.into === 'plan' ? 'plan approved; it is built on the next `asf run`' : `merged ${r.merged} into ${r.into}`);
       return 0;
     }
     case 'reject':
@@ -134,6 +137,16 @@ async function main(argv: string[]): Promise<number> {
       const id = need(0, 'item id');
       const o = values.accept ? answer(id, undefined, '', { accept: true }) : answer(id, need(1, 'question id (Q1, ...)'), args.slice(2).join(' '));
       console.log(clarified(o));
+      return 0;
+    }
+    case 'release': {
+      if (values.dry) {
+        const ids = releasable();
+        console.log(ids.length ? `would release: ${ids.join(', ')}` : 'nothing to release');
+        return 0;
+      }
+      const r = release();
+      console.log(r.items.length ? `released ${r.items.join(', ')} (${r.commit})` : 'nothing to release');
       return 0;
     }
     case 'retry':

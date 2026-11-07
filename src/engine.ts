@@ -22,7 +22,8 @@ export interface EngineContext {
 
 export interface ItemOutcome {
   id: string;
-  state: 'review' | 'blocked';
+  /** merged: passed review and merged into the integration branch on its own (by `asf run`). */
+  state: 'review' | 'blocked' | 'plan-review' | 'merged';
   reason?: string;
   tokens: number;
   flags: string[];
@@ -33,6 +34,29 @@ interface Verdict {
   criteria: { id: string; status: 'met' | 'not_met' | 'unverified'; evidence: string }[];
   findings: { severity: 'blocker' | 'major' | 'minor'; message: string }[];
   summary: string;
+}
+
+const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'tech-lead', skills: ['plan-change'], access: 'read' };
+
+interface Plan {
+  approach: string;
+  files: string[];
+  tests: string[];
+  risks: string[];
+}
+
+export function formatPlan(p: Plan): string {
+  const list = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n') || '- (none)';
+  return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}`;
+}
+
+/** The branch items start from: the integration branch, created from the base branch the first time. */
+export function integrationBase(root: string, project: ProjectConfig): string {
+  const base = project.base_branch ?? 'main';
+  const integration = project.integration_branch;
+  if (!integration) return base;
+  if (!git(root, ['branch', '--list', integration]).trim()) git(root, ['branch', integration, base]);
+  return integration;
 }
 
 /** The runner does not take "pass" on trust: an unmet criterion or a blocker finding fails the item. */
@@ -48,7 +72,8 @@ export function verdictFails(v: Verdict): string | undefined {
 
 export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: Workflow = loadWorkflow('feature')): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
-  const base = project.base_branch ?? 'main';
+  // Items branch from the integration branch when there is one, so each builds on what is already merged.
+  const base = integrationBase(paths.root, project);
   const log = ctx.log ?? (() => {});
   const all = loadState(paths.state);
   const prev = all.items[item.id];
@@ -84,6 +109,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   ensureWorktree(paths.root, worktree, branch, base);
   // Tests written for an earlier run stay locked, as long as the branch still has them.
   if (prev?.tests && isAncestor(worktree, prev.tests.commit)) st.tests = prev.tests;
+  st.plan = prev?.plan;
   save();
   event({ step: 'item', kind: 'item', outcome: 'started' });
   log(`${item.id} started in ${worktree}`);
@@ -98,7 +124,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   const testsStep = workflow.steps.find((s): s is AgentStep => s.kind === 'agent' && s.scope === 'tests');
   const steps = workflow.steps.filter((s) => s !== testsStep);
 
-  const callAgent = async (step: AgentStep, attempt: number, extra: Pick<ItemContext, 'feedback' | 'checks' | 'diff'>) => {
+  const callAgent = async (step: AgentStep, attempt: number, extra: Pick<ItemContext, 'feedback' | 'checks' | 'diff'>, schema?: string) => {
     const runtimeName = runtimeFor(project, step.role);
     const locked = step.scope === 'tests' ? [] : (st.tests?.files ?? []);
     const result = await ctx.runtime(runtimeName).call({
@@ -112,10 +138,11 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         maxAttempts: policy.max_attempts,
         ...extra,
         lockedTests: step.access === 'write' ? locked : undefined,
+        plan: st.plan?.approved ? st.plan.text : undefined,
       }),
       access: step.access,
       model: project.models?.[step.role],
-      schema: step.output === 'verdict' ? vendorSchema('verdict') : undefined,
+      schema: schema ? vendorSchema(schema) : step.output === 'verdict' ? vendorSchema('verdict') : undefined,
       allowedCommands: commands,
       deniedCommands: policy.denied_commands,
       protectedPaths: [...policy.protected_paths, ...locked],
@@ -145,6 +172,18 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   /** Locked test files the staged change differs on. */
   const lockedChanges = () =>
     st.tests ? git(worktree, ['diff', '--cached', '--name-only', st.tests.commit, '--', ...st.tests.files]).split('\n').filter(Boolean) : [];
+
+  // A high-risk item gets a plan the owner approves before anything is written.
+  if (item.risk === 'high' && !st.plan?.approved) {
+    if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
+    const { result, runtimeName } = await callAgent(PLAN_STEP, 1, { feedback: st.feedback }, 'plan');
+    if (!result.ok) return finish('blocked', `${runtimeName} failed in plan: ${result.error}`);
+    const errors = validate('plan', result.structured);
+    if (errors.length) return finish('blocked', `plan returned an invalid plan: ${errors.join('; ')}`);
+    st.plan = { text: formatPlan(result.structured as Plan) };
+    st.feedback = undefined;
+    return finish('plan-review', 'the plan waits for your approval');
+  }
 
   if (testsStep && !st.tests) {
     if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
@@ -254,7 +293,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
 
     if (!failed) {
       const changed = stageAndList(worktree, base);
-      const flags = changed.filter((f) => matchesAny(f, policy.approval_paths));
+      // Anything flagged waits for the owner on its own, even with an integration branch.
+      const flags = changed.filter((f) => matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths));
+      if (item.risk === 'high') flags.push('risk: high');
       commitAll(worktree, `feat: ${item.title}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
       st.feedback = undefined;
       return finish('review', undefined, flags);

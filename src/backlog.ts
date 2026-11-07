@@ -13,6 +13,8 @@ export interface BacklogItem {
   spec?: string;
   criteria?: string[];
   depends_on?: string[];
+  /** high: plan approved before the build, change approved on its own. */
+  risk?: 'high';
   /** The ticket this item comes from. */
   tracker?: string;
   file: string;
@@ -53,11 +55,11 @@ export function loadBacklog(dir: string): { items: BacklogItem[]; errors: string
   return { items, errors };
 }
 
-const BUSY: ItemState['state'][] = ['in-progress', 'review', 'blocked'];
+const BUSY: ItemState['state'][] = ['in-progress', 'review', 'blocked', 'plan-review', 'merged'];
 
-/** The next item to build: ready, not busy, every dependency done; lowest priority number first. */
+/** The next item to build: ready, not busy, every dependency done or merged; lowest priority number first. */
 export function nextReady(items: BacklogItem[], state: State): BacklogItem | undefined {
-  const done = new Set(items.filter((i) => i.status === 'done').map((i) => i.id));
+  const done = new Set(items.filter((i) => i.status === 'done' || state.items[i.id]?.state === 'merged').map((i) => i.id));
   return items
     .filter((i) => i.status === 'ready')
     .filter((i) => !BUSY.includes(state.items[i.id]?.state as ItemState['state']))

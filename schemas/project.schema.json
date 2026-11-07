@@ -161,6 +161,11 @@
           }
         }
       }
+    },
+    "integration_branch": {
+      "type": "string",
+      "minLength": 1,
+      "description": "When set, items branch from it and those that pass checks and review merge into it on their own; the owner releases it into base_branch in batches with `asf release`. Items that touch approval or sensitive paths, or are high risk, still wait for the owner one by one."
     }
   },
   "definitions": {

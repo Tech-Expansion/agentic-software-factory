@@ -110,9 +110,9 @@ test('a ticket goes from intake to merged through the tracker alone, and only th
   await sync({ tracker: j.tracker });
   assert.equal(readFileSync(join(root, 'hello.txt'), 'utf8'), 'x\n');
   assert.deepEqual(j.moves, ['AI-7→Clarifying', 'AI-7→Ready', 'AI-7→In Review', 'AI-7→Done']);
-  assert.match(j.comments['AI-7']!.at(-1)!.body, /B-0001 is merged/);
+  assert.match(j.comments['AI-7']!.at(-1)!.body, /B-0001 is in main/);
   await sync({ tracker: j.tracker });
-  assert.equal(j.comments['AI-7']!.filter((c) => /is merged/.test(c.body)).length, 1, 'said once');
+  assert.equal(j.comments['AI-7']!.filter((c) => /is in main/.test(c.body)).length, 1, 'said once');
 });
 
 test('answers and decisions are read from plain comments', () => {

@@ -53,6 +53,12 @@
     "tracker": {
       "type": "string",
       "description": "The ticket this item comes from, for example AI-12."
+    },
+    "risk": {
+      "enum": [
+        "high"
+      ],
+      "description": "high: a plan is approved by the owner before the build, and the change is approved on its own before it merges. For keys, signing, money, auth."
     }
   }
 }

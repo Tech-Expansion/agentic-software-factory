@@ -20,6 +20,7 @@ export interface ProjectConfig {
   success_metric?: string;
   kill_criteria?: string;
   base_branch?: string;
+  integration_branch?: string;
   runtimes?: { default?: RuntimeName; roles?: Record<string, RuntimeName> };
   models?: Record<string, string>;
   commands: { setup?: string[]; check: string[] };
