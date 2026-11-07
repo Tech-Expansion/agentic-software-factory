@@ -45,7 +45,8 @@ function fake(content: (c: AgentCall) => string): Runtime {
   return {
     name: 'claude-code',
     async call(c): Promise<AgentResult> {
-      if (c.access === 'write') writeFileSync(join(c.cwd, 'hello.txt'), content(c));
+      if (c.writeOnly) writeFileSync(join(c.cwd, 'hello.test.js'), '// AC-001\n');
+      else if (c.access === 'write') writeFileSync(join(c.cwd, 'hello.txt'), content(c));
       return { ok: true, text: 'done', structured: pass, tokens: { input: 100, cached_input: 0, output: 10, total: 110 }, durationMs: 1 };
     },
     interactive: async () => 0,
@@ -65,7 +66,7 @@ test('eval: hidden tests decide delivery, drafts are left alone, results are wri
   assert.equal(good?.delivered, true, good?.error ?? good?.hidden?.output);
   assert.equal(good?.firstAttempt, true);
   assert.deepEqual(good?.items, [{ id: 'B-0001', state: 'done', attempts: 1, reason: undefined }]);
-  assert.equal(good?.tokens, 220);
+  assert.equal(good?.tokens, 330, 'tests, build and verify');
   assert.deepEqual(good?.breaches, []);
   assert.equal(wrong?.delivered, false);
   assert.equal(wrong?.hidden?.ok, false);
@@ -85,7 +86,7 @@ test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', 
   const rt: Runtime = {
     name: 'claude-code',
     async call(c): Promise<AgentResult> {
-      if (c.access === 'write') {
+      if (c.access === 'write' && !c.writeOnly) {
         const flaky = c.cwd.includes('asf-eval-flaky-');
         writeFileSync(join(c.cwd, 'hello.txt'), flaky && ++flakyWrites > 1 ? 'hello' : 'hi');
       }
@@ -101,6 +102,7 @@ test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', 
   const t = r.cases[0]!.transcripts!;
   assert.match(t, /r-transcripts\/flaky-t1$/);
   assert.equal(readFileSync(join(t, 'B-0001', 'a1-build.jsonl'), 'utf8'), '{"type":"result"}\n');
+  assert.ok(existsSync(join(t, 'B-0001', 'a1-tests.jsonl')));
 });
 
 test('eval: an invalid case is refused before anything runs', async () => {

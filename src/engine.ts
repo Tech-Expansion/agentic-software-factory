@@ -2,15 +2,15 @@ import { join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
 import { loadSchema, runtimeFor, validate, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
-import { commitAll, ensureWorktree, git, restorePaths, stagedDiff, stageAndList } from './git.js';
+import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
 import type { ProductPaths } from './paths.js';
-import { itemPrompt, systemPrompt } from './prompt.js';
+import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
 import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
 import type { Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
-import { loadWorkflow, type Workflow } from './workflow.js';
+import { loadWorkflow, type AgentStep, type Workflow } from './workflow.js';
 
 export interface EngineContext {
   paths: ProductPaths;
@@ -88,6 +88,8 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
 
   const fresh = !prev;
   ensureWorktree(paths.root, worktree, branch, base);
+  // Tests written for an earlier run stay locked, as long as the branch still has them.
+  if (prev?.tests && isAncestor(worktree, prev.tests.commit)) st.tests = prev.tests;
   save();
   event({ step: 'item', kind: 'item', outcome: 'started' });
   log(`${item.id} started in ${worktree}`);
@@ -99,13 +101,91 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   }
 
   const commands = [...(project.commands.setup ?? []), ...project.commands.check];
+  const testsStep = workflow.steps.find((s): s is AgentStep => s.kind === 'agent' && s.scope === 'tests');
+  const steps = workflow.steps.filter((s) => s !== testsStep);
+
+  const callAgent = async (step: AgentStep, attempt: number, extra: Pick<ItemContext, 'feedback' | 'checks' | 'diff'>) => {
+    const runtimeName = runtimeFor(project, step.role);
+    const locked = step.scope === 'tests' ? [] : (st.tests?.files ?? []);
+    const result = await ctx.runtime(runtimeName).call({
+      cwd: worktree,
+      systemPrompt: systemPrompt(step.role, step.skills),
+      prompt: itemPrompt({
+        root: worktree,
+        project,
+        item,
+        attempt,
+        maxAttempts: policy.max_attempts,
+        ...extra,
+        lockedTests: step.access === 'write' ? locked : undefined,
+      }),
+      access: step.access,
+      model: project.models?.[step.role],
+      schema: step.output === 'verdict' ? verdictSchema() : undefined,
+      allowedCommands: commands,
+      deniedCommands: policy.denied_commands,
+      protectedPaths: [...policy.protected_paths, ...locked],
+      writeOnly: step.scope === 'tests' ? policy.test_paths : undefined,
+      sandbox: policy.sandbox,
+    });
+    if (result.transcript) saveTranscript(paths.runs, item.id, `a${attempt}-${step.id}`, result.transcript);
+    st.tokens += result.tokens.total;
+    event({
+      attempt,
+      step: step.id,
+      kind: 'agent',
+      role: step.role,
+      runtime: runtimeName,
+      model: project.models?.[step.role],
+      tokens: result.tokens,
+      cost_usd: result.costUsd,
+      duration_ms: result.durationMs,
+      outcome: result.ok ? 'ok' : 'error',
+      detail: result.error,
+      denied: result.denied,
+    });
+    log(`${item.id} attempt ${attempt} ${step.id} (${runtimeName}): ${result.ok ? 'ok' : 'error'}, ${result.tokens.total} tokens`);
+    return { result, runtimeName };
+  };
+
+  /** Locked test files the staged change differs on. */
+  const lockedChanges = () =>
+    st.tests ? git(worktree, ['diff', '--cached', '--name-only', st.tests.commit, '--', ...st.tests.files]).split('\n').filter(Boolean) : [];
+
+  if (testsStep && !st.tests) {
+    if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
+    const { result, runtimeName } = await callAgent(testsStep, 1, {});
+    // A runtime error is usually a limit or a sign-in problem; retrying would only burn tokens.
+    if (!result.ok) return finish('blocked', `${runtimeName} failed in ${testsStep.id}: ${result.error}`);
+    const changed = stageAndList(worktree, base);
+    const other = changed.filter((f) => !matchesAny(f, policy.test_paths) || matchesAny(f, policy.protected_paths));
+    if (other.length) {
+      restorePaths(worktree, base, other);
+      event({ attempt: 1, step: testsStep.id, kind: 'checks', outcome: 'reverted', detail: `not test files: ${other.join(', ')}` });
+    }
+    const files = changed.filter((f) => !other.includes(f));
+    stageAndList(worktree, base);
+    const secrets = findSecrets(git(worktree, ['diff', '--cached', '-U0', base]), policy.secret_patterns);
+    if (secrets.length) return finish('blocked', `the acceptance tests contain what looks like a secret:\n${secrets.map((x) => `- ${x}`).join('\n')}`);
+    if (files.length && commitAll(worktree, `test: acceptance tests for ${item.title}\n\nBacklog: ${item.id}\n`)) {
+      st.tests = { commit: git(worktree, ['rev-parse', 'HEAD']).trim(), files };
+      const red = runChecks(worktree, project.commands.check, policy.sandbox);
+      const green = red.every((r) => r.ok);
+      // Tests that already pass test nothing new, unless the item is a refactor. Recorded, not enforced.
+      event({ attempt: 1, step: testsStep.id, kind: 'checks', outcome: green ? 'passed' : 'failed', detail: green ? 'the acceptance tests pass before the build' : undefined });
+    } else {
+      event({ attempt: 1, step: testsStep.id, kind: 'checks', outcome: 'no tests', detail: 'the tests step wrote no test files' });
+    }
+    save();
+  }
+
   let feedback = st.feedback;
   for (let attempt = 1; attempt <= policy.max_attempts; attempt++) {
     st.attempts = attempt;
     let checksText: string | undefined;
     let failed: string | undefined;
 
-    for (const step of workflow.steps) {
+    for (const step of steps) {
       if (step.kind === 'checks') {
         const results = runChecks(worktree, project.commands.check, policy.sandbox);
         const ok = results.every((r) => r.ok);
@@ -120,47 +200,12 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
       }
 
       if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
-      const runtimeName = runtimeFor(project, step.role);
-      const runtime = ctx.runtime(runtimeName);
       const diff = step.access === 'read' ? (stageAndList(worktree, base), stagedDiff(worktree, base, 60_000)) : undefined;
-      const result = await runtime.call({
-        cwd: worktree,
-        systemPrompt: systemPrompt(step.role, step.skills),
-        prompt: itemPrompt({
-          root: worktree,
-          project,
-          item,
-          attempt,
-          maxAttempts: policy.max_attempts,
-          feedback: step.access === 'write' ? feedback : undefined,
-          checks: step.access === 'read' ? checksText : undefined,
-          diff,
-        }),
-        access: step.access,
-        model: project.models?.[step.role],
-        schema: step.output === 'verdict' ? verdictSchema() : undefined,
-        allowedCommands: commands,
-        deniedCommands: policy.denied_commands,
-        protectedPaths: policy.protected_paths,
-        sandbox: policy.sandbox,
+      const { result, runtimeName } = await callAgent(step, attempt, {
+        feedback: step.access === 'write' ? feedback : undefined,
+        checks: step.access === 'read' ? checksText : undefined,
+        diff,
       });
-      if (result.transcript) saveTranscript(paths.runs, item.id, `a${attempt}-${step.id}`, result.transcript);
-      st.tokens += result.tokens.total;
-      event({
-        attempt,
-        step: step.id,
-        kind: 'agent',
-        role: step.role,
-        runtime: runtimeName,
-        model: project.models?.[step.role],
-        tokens: result.tokens,
-        cost_usd: result.costUsd,
-        duration_ms: result.durationMs,
-        outcome: result.ok ? 'ok' : 'error',
-        detail: result.error,
-        denied: result.denied,
-      });
-      log(`${item.id} attempt ${attempt} ${step.id} (${runtimeName}): ${result.ok ? 'ok' : 'error'}, ${result.tokens.total} tokens`);
       // A runtime error is usually a limit or a sign-in problem; retrying would only burn tokens.
       if (!result.ok) return finish('blocked', `${runtimeName} failed in ${step.id}: ${result.error}`);
 
@@ -172,7 +217,13 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
           failed = `You changed protected files. They were put back; do not change them: ${touched.join(', ')}`;
           break;
         }
-        if (!changed.length) {
+        const locked = lockedChanges();
+        if (locked.length) {
+          restorePaths(worktree, st.tests!.commit, locked);
+          failed = `The acceptance tests are locked, and your changes to them were put back: ${locked.join(', ')}. Make them pass by changing the code; if a test is wrong, say so under "Assumptions".`;
+          break;
+        }
+        if (!stageAndList(worktree, st.tests?.commit ?? base).length) {
           failed = 'No file was changed.';
           break;
         }
@@ -195,9 +246,10 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     if (!failed) {
       const changed = stageAndList(worktree, base);
       // Checked again here: a read-only step must not be able to slip a protected change into the commit.
-      const late = changed.filter((f) => matchesAny(f, policy.protected_paths));
+      const late = [...changed.filter((f) => matchesAny(f, policy.protected_paths)), ...lockedChanges()];
       if (late.length) {
-        restorePaths(worktree, base, late);
+        restorePaths(worktree, base, changed.filter((f) => matchesAny(f, policy.protected_paths)));
+        if (st.tests) restorePaths(worktree, st.tests.commit, lockedChanges());
         return finish('blocked', `protected files changed outside a build step: ${late.join(', ')}`);
       }
       const secrets = findSecrets(git(worktree, ['diff', '--cached', '-U0', base]), policy.secret_patterns);

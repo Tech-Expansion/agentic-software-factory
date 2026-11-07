@@ -11,7 +11,8 @@ Rules:
 - Stay within the item. Do not start other items, refactor unrelated code or add features the spec does not ask for.
 - The spec is the contract. If it is unclear or contradicts the code, do the smallest reasonable thing, and say so in
   your final message under "Assumptions".
-- Never change `.factory/`, `AGENTS.md`, `product/`, `specs/` or `backlog/`. The runner reverts such changes.
+- Never change `.factory/`, `AGENTS.md`, `product/`, `specs/` or `backlog/`, or the locked acceptance tests. The
+  runner reverts such changes.
 - Do not commit, push, switch branches or merge. The runner commits your work after it passes.
 - Add a dependency only if the item cannot be done without it, and name it in your final message.
 - Never read, print or write secrets or `.env` files.

@@ -21,15 +21,23 @@ process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.in
 
 type Script = (c: AgentCall, n: number) => Partial<AgentResult> & { write?: Record<string, string | undefined> };
 
-/** A runtime that follows a script instead of calling a model. */
-function fake(script: Script): Runtime & { calls: AgentCall[] } {
+const acceptance: Script = () => ({ write: { 'acceptance.test.js': "test('AC-001 hello.txt exists', () => {});\n" } });
+
+/**
+ * A runtime that follows a script instead of calling a model. The tests step (the call limited to test files) follows
+ * its own script and is kept out of `calls`, so the builder and verifier calls keep their numbers.
+ */
+function fake(script: Script, tester: Script = acceptance): Runtime & { calls: AgentCall[]; testerCalls: AgentCall[] } {
   const calls: AgentCall[] = [];
+  const testerCalls: AgentCall[] = [];
   return {
     name: 'claude-code',
     calls,
+    testerCalls,
     async call(c) {
-      calls.push(c);
-      const r = script(c, calls.length);
+      const own = c.writeOnly ? testerCalls : calls;
+      own.push(c);
+      const r = (c.writeOnly ? tester : script)(c, own.length);
       for (const [f, text] of Object.entries(r.write ?? {})) {
         if (text === undefined) continue;
         mkdirSync(join(c.cwd, f, '..'), { recursive: true });
@@ -117,7 +125,7 @@ test('a protected change made during review never reaches the commit', async () 
   assert.match(out!.reason!, /outside a build step: specs\/hello\.md/);
   const wt = join(root, '.factory/worktrees/B-0001');
   assert.match(readFileSync(join(wt, 'specs/hello.md'), 'utf8'), /AC-001/);
-  assert.equal(git(wt, ['rev-parse', 'HEAD']).trim(), git(root, ['rev-parse', 'main']).trim(), 'nothing was committed');
+  assert.equal(git(wt, ['log', '--format=%s', 'main..HEAD']).trim(), 'test: acceptance tests for Say hello', 'only the tests were committed');
 });
 
 test('a change with a secret in it is sent back and never committed', async () => {
@@ -144,6 +152,40 @@ test('deleting a test to get through is sent back', async () => {
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
   assert.match(rt.calls[1]!.prompt, /deleted test file hello\.test\.js/);
+});
+
+test('acceptance tests come first, only test files are kept, and the builder cannot change them', async () => {
+  const rt = fake(
+    (c, n) => (c.access === 'write' ? { write: n === 1 ? { 'hello.txt': 'hi', 'acceptance.test.js': '// gone\n' } : { 'hello.txt': 'hi' } } : { structured: verdict(true) }),
+    () => ({ write: { 'acceptance.test.js': "test('AC-001', () => {});\n", 'hello.txt': 'from the tester' } }),
+  );
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  assert.equal(rt.testerCalls.length, 1);
+  assert.ok(rt.testerCalls[0]!.writeOnly!.includes('**/*.test.*'), 'the tester may write test files only');
+  const build = rt.calls[0]!;
+  assert.ok(build.protectedPaths.includes('acceptance.test.js'), 'the builder is denied the locked tests');
+  assert.match(build.prompt, /Acceptance tests \(locked\)[\s\S]*- acceptance\.test\.js/);
+  assert.match(rt.calls[1]!.prompt, /acceptance tests are locked[\s\S]*acceptance\.test\.js/);
+
+  const wt = join(root, '.factory/worktrees/B-0001');
+  assert.deepEqual(git(wt, ['log', '--format=%s', 'main..HEAD']).trim().split('\n'), ['feat: Say hello', 'test: acceptance tests for Say hello']);
+  assert.equal(git(wt, ['show', 'HEAD~1:acceptance.test.js']), "test('AC-001', () => {});\n");
+  assert.equal(git(wt, ['show', 'HEAD:acceptance.test.js']), "test('AC-001', () => {});\n", 'the builder change was put back');
+  assert.equal(git(wt, ['show', 'HEAD~1', '--name-only', '--format=']).trim(), 'acceptance.test.js', 'the tester commit holds tests only');
+  assert.equal(readFileSync(join(wt, 'hello.txt'), 'utf8'), 'hi');
+  const red = readEvents(join(root, '.factory/runs')).find((e) => e.step === 'tests' && e.kind === 'checks');
+  assert.equal(red?.outcome, 'reverted');
+});
+
+test('the tests are written once: a rejected item keeps them', async () => {
+  const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(true) }));
+  await run({ context: { runtime: () => rt } });
+  reject('B-0001', 'again');
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  assert.equal(rt.testerCalls.length, 1);
+  assert.match(rt.calls[2]!.prompt, /Acceptance tests \(locked\)/);
 });
 
 test('a runtime error blocks at once instead of retrying', async () => {

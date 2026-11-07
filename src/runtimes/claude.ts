@@ -24,7 +24,8 @@ interface ClaudeJson {
 export function claudeArgs(c: AgentCall): string[] {
   const allowed = [...READ_TOOLS];
   if (c.access === 'write') {
-    allowed.push(...WRITE_TOOLS, ...c.allowedCommands.map((cmd) => `Bash(${cmd}:*)`));
+    const write = c.writeOnly ? c.writeOnly.flatMap((g) => WRITE_TOOLS.map((t) => `${t}(${g})`)) : WRITE_TOOLS;
+    allowed.push(...write, ...c.allowedCommands.map((cmd) => `Bash(${cmd}:*)`));
   }
   const sandbox = c.sandbox && !sandboxOff() ? c.sandbox : undefined;
   const denied = [

@@ -55,6 +55,10 @@ export function restorePaths(worktree: string, base: string, paths: string[]): v
   }
 }
 
+export function isAncestor(cwd: string, commit: string, of = 'HEAD'): boolean {
+  return spawnSync('git', ['merge-base', '--is-ancestor', commit, of], { cwd }).status === 0;
+}
+
 export function commitAll(cwd: string, message: string): boolean {
   git(cwd, ['add', '-A']);
   if (git(cwd, ['diff', '--cached', '--name-only']).trim() === '') return false;

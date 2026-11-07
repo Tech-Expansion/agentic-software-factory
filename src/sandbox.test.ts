@@ -76,6 +76,14 @@ test('claude adapter: Bash runs in a sandbox that fails closed, and Read cannot 
   }
 });
 
+test('claude adapter: a tests step may edit test files only', () => {
+  const allowed = (c: AgentCall) => claudeArgs(c)[claudeArgs(c).indexOf('--allowedTools') + 1]!.split(',');
+  const tests = allowed(call({ writeOnly: ['**/*.test.*', '**/tests/**'] }));
+  assert.ok(tests.includes('Edit(**/*.test.*)') && tests.includes('Write(**/tests/**)'));
+  assert.ok(!tests.includes('Edit') && !tests.includes('Write'));
+  assert.ok(allowed(call()).includes('Edit'));
+});
+
 test('claude adapter: the result and the tightest rate limit are read from the stream', () => {
   const stream = [
     { type: 'system', subtype: 'init' },

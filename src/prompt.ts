@@ -34,6 +34,8 @@ export interface ItemContext {
   feedback?: string;
   checks?: string;
   diff?: string;
+  /** Acceptance tests written before the build, which the builder cannot change. */
+  lockedTests?: string[];
 }
 
 /** Reads a file for a prompt, without HTML comments (template guidance costs tokens and tells the agent nothing). */
@@ -59,6 +61,11 @@ export function itemPrompt(c: ItemContext): string {
   }
   const checks = project.commands.check.map((cmd) => `- \`${cmd}\``).join('\n');
   out.push(`## Checks the runner will run after you\n\n${checks}`);
+  if (c.lockedTests?.length) {
+    out.push(
+      `## Acceptance tests (locked)\n\nWritten from the criteria before the build. You cannot change them: make them pass. If one is wrong, say so under "Assumptions" in your final message.\n\n${c.lockedTests.map((f) => `- ${f}`).join('\n')}`,
+    );
+  }
   out.push(`Attempt ${c.attempt} of ${c.maxAttempts}.`);
   if (c.feedback) out.push(`## Feedback from the previous attempt\n\n${c.feedback}`);
   if (c.checks) out.push(`## Check results\n\n${c.checks}`);

@@ -15,6 +15,8 @@ export interface ItemState {
   feedback?: string;
   flags?: string[];
   summary?: string;
+  /** The commit with the item's acceptance tests, and the files in it, which later steps cannot change. */
+  tests?: { commit: string; files: string[] };
   updated_at: string;
 }
 

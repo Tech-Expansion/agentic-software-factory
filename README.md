@@ -4,8 +4,9 @@ A local-first agentic software factory: a small team of AI agents that turns a r
 software, using your own Claude Code or Codex subscription.
 
 You plan with the **planner** in an interactive session. After that, `asf run` builds the backlog unattended: the
-**builder** implements one item in its own git worktree, your product's own checks run, and a read-only **verifier**
-judges the result against the item's acceptance criteria. Nothing reaches your main branch until you run
+**tester** turns an item's acceptance criteria into tests, which are then locked; the **builder** implements the item
+in its own git worktree until they pass; your product's own checks run; and a read-only **verifier** judges the result
+against the item's acceptance criteria. Nothing reaches your main branch until you run
 `asf approve`.
 
 > Status: 0.1, experimental. The first vertical slice works end to end with Claude Code 2.1 and codex-cli 0.147.
@@ -27,7 +28,8 @@ judges the result against the item's acceptance criteria. Nothing reaches your m
 
 ```mermaid
 flowchart LR
-  R[ready item] --> B[builder<br/>write access, worktree]
+  R[ready item] --> T[tester<br/>test files only, committed and locked]
+  T --> B[builder<br/>write access, worktree]
   B --> C[product checks<br/>no model]
   C -->|fail| B
   C -->|pass| V[verifier<br/>read-only, verdict JSON]
@@ -89,7 +91,7 @@ asf init my-idea && cd my-idea
 
 | Path | What it is |
 | --- | --- |
-| `agents/` | Role briefs: planner, builder, verifier |
+| `agents/` | Role briefs: planner, tester, builder, verifier |
 | `skills/` | Skills the steps load, one folder each |
 | `workflows/` | Steps per kind of work (`feature.yaml`) |
 | `policies/default.yaml` | What agents may not do, limits, paths that need your attention |
