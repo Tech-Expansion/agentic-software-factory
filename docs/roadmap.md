@@ -79,6 +79,9 @@ engineering, Kent Beck on agents and tests, Simon Willison's lethal trifecta, De
 
 ## Milestones
 
+Where we are (2026-11-07): M0 to M6 are built and covered by tests with a fake runtime; the Jira adapter is not yet
+checked against the real `acli`. M7 has not started.
+
 ### M0. Measure first
 
 `asf eval` runs a set of cases, each a small product with a backlog and hidden acceptance tests, and reports delivery
