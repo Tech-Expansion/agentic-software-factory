@@ -4,3 +4,4 @@
 .factory/state.json
 .factory/clarify/
 .factory/tracker.json
+.factory/lock

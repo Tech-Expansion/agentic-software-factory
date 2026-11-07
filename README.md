@@ -86,6 +86,7 @@ asf init my-idea && cd my-idea
 | `asf answer <id> <Q> <answer>` / `asf answer <id> --accept` | Answer a question, or take every recommendation left; the decisions go into the item, which becomes ready |
 | `asf sync` | With a tracker in `project.yaml`: take in the owner's new tickets, post questions and results, apply the owner's comments (`Q1: ...`, `/accept`, `/approve`, `/reject <reason>`, `/retry`); see [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md) |
 | `asf run [--item id] [--all]` | Build ready items unattended |
+| `asf serve [--workers n] [--interval s] [--once]` | Work unattended on an always-on host: sync, clarify, build up to n independent items at a time, report back. Idle rounds call no model; a usage limit pauses until the quota resets; a stop or crash resumes where it was. One process per product (`.factory/lock`) |
 | `asf show <id>` | Branch, worktree, why it stopped, what needs your attention |
 | `asf approve <id>` | Approve a high-risk item's plan, or mark an item done and merge its branch: into the integration branch when `project.yaml` has one, otherwise into the base branch |
 | `asf release [--dry]` | Merge the integration branch into the base branch, as one batch ([ADR 0006](docs/adr/0006-integration-branch-and-batch-releases.md)) |

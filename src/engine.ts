@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
@@ -8,7 +9,7 @@ import { findSecrets, testTampering } from './integrity.js';
 import type { ProductPaths } from './paths.js';
 import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
 import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
-import type { Runtime } from './runtimes/types.js';
+import type { AgentResult, Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
 import { loadWorkflow, type AgentStep, type Workflow } from './workflow.js';
 
@@ -22,8 +23,13 @@ export interface EngineContext {
 
 export interface ItemOutcome {
   id: string;
-  /** merged: passed review and merged into the integration branch on its own (by `asf run`). */
-  state: 'review' | 'blocked' | 'plan-review' | 'merged';
+  /**
+   * merged: passed review and merged into the integration branch on its own (by `asf run`). paused: the CLI hit a
+   * usage limit; the item resumes from where it was once the quota resets.
+   */
+  state: 'review' | 'blocked' | 'plan-review' | 'merged' | 'paused';
+  /** For paused: when the quota resets (ms since the epoch), if the CLI said. */
+  resumeAt?: number;
   reason?: string;
   tokens: number;
   flags: string[];
@@ -34,6 +40,13 @@ interface Verdict {
   criteria: { id: string; status: 'met' | 'not_met' | 'unverified'; evidence: string }[];
   findings: { severity: 'blocker' | 'major' | 'minor'; message: string }[];
   summary: string;
+}
+
+/** True when a failed call hit the subscription's usage limit rather than something a person must fix. */
+export function rateLimited(r: AgentResult): boolean {
+  const status = r.rateLimit?.status;
+  if (status && status !== 'allowed' && status !== 'allowed_warning') return true;
+  return /usage limit|rate limit|too many requests|\b429\b|quota/i.test(r.error ?? '');
 }
 
 const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'tech-lead', skills: ['plan-change'], access: 'read' };
@@ -95,7 +108,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     saveState(paths.state, s);
   };
   const event = (e: Omit<RunEvent, 'at' | 'item'>) => appendEvent(paths.runs, { at: new Date().toISOString(), item: item.id, ...e });
-  const finish = (state: ItemOutcome['state'], reason?: string, flags: string[] = []): ItemOutcome => {
+  const finish = (state: 'review' | 'blocked' | 'plan-review', reason?: string, flags: string[] = []): ItemOutcome => {
     st.state = state;
     st.reason = reason;
     st.flags = flags;
@@ -105,7 +118,19 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     return { id: item.id, state, reason, tokens: st.tokens, flags };
   };
 
-  const fresh = !prev;
+  // A worktree made now needs the setup commands, whether the item is new or was reset.
+  /** A runtime error: a usage limit pauses the item; anything else (sign-in, a crash) blocks it, without retrying. */
+  const stopped = (r: AgentResult, runtimeName: string, stepId: string): ItemOutcome => {
+    if (!rateLimited(r)) return finish('blocked', `${runtimeName} failed in ${stepId}: ${r.error}`);
+    st.state = 'rework';
+    st.reason = `paused by a usage limit in ${stepId}: ${r.error ?? r.rateLimit?.status}`;
+    save();
+    event({ step: stepId, kind: 'item', outcome: 'paused', detail: st.reason });
+    log(`${item.id} paused: ${st.reason}`);
+    return { id: item.id, state: 'paused', reason: st.reason, tokens: st.tokens, flags: [], resumeAt: r.rateLimit?.resetsAt ? r.rateLimit.resetsAt * 1000 : undefined };
+  };
+
+  const fresh = !existsSync(worktree);
   ensureWorktree(paths.root, worktree, branch, base);
   // Tests written for an earlier run stay locked, as long as the branch still has them.
   if (prev?.tests && isAncestor(worktree, prev.tests.commit)) st.tests = prev.tests;
@@ -177,7 +202,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   if (item.risk === 'high' && !st.plan?.approved) {
     if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
     const { result, runtimeName } = await callAgent(PLAN_STEP, 1, { feedback: st.feedback }, 'plan');
-    if (!result.ok) return finish('blocked', `${runtimeName} failed in plan: ${result.error}`);
+    if (!result.ok) return stopped(result, runtimeName, 'plan');
     const errors = validate('plan', result.structured);
     if (errors.length) return finish('blocked', `plan returned an invalid plan: ${errors.join('; ')}`);
     st.plan = { text: formatPlan(result.structured as Plan) };
@@ -189,7 +214,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
     const { result, runtimeName } = await callAgent(testsStep, 1, {});
     // A runtime error is usually a limit or a sign-in problem; retrying would only burn tokens.
-    if (!result.ok) return finish('blocked', `${runtimeName} failed in ${testsStep.id}: ${result.error}`);
+    if (!result.ok) return stopped(result, runtimeName, testsStep.id);
     const changed = stageAndList(worktree, base);
     const other = changed.filter((f) => !matchesAny(f, policy.test_paths) || matchesAny(f, policy.protected_paths));
     if (other.length) {
@@ -240,7 +265,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         diff,
       });
       // A runtime error is usually a limit or a sign-in problem; retrying would only burn tokens.
-      if (!result.ok) return finish('blocked', `${runtimeName} failed in ${step.id}: ${result.error}`);
+      if (!result.ok) return stopped(result, runtimeName, step.id);
 
       if (step.access === 'write') {
         const changed = stageAndList(worktree, base);

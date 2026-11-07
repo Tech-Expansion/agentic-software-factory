@@ -52,8 +52,10 @@ export function approve(id: string, root?: string): { merged: string; into: stri
   const merged = spawnSync('git', ['merge', '--no-ff', '-q', st.branch, '-m', `Merge ${id}: ${item.title}`], { cwd: target, encoding: 'utf8' });
   if (merged.status !== 0) {
     git(target, ['merge', '--abort'], true);
-    const reason = `does not merge cleanly into ${integration ?? base}; it needs to be rebuilt on top of it:\n${(merged.stdout + merged.stderr).trim()}`;
-    state.items[id] = { ...st, state: 'blocked', reason, updated_at: new Date().toISOString() };
+    // The work is started again from the target on retry: a fresh worktree, new tests, the approved plan kept.
+    removeWorktree(paths.root, st.worktree, st.branch);
+    const reason = `does not merge cleanly into ${integration ?? base}; \`asf retry ${id}\` builds it again on top of it:\n${(merged.stdout + merged.stderr).trim()}`;
+    state.items[id] = { ...st, state: 'blocked', reason, tests: undefined, feedback: undefined, updated_at: new Date().toISOString() };
     saveState(paths.state, state);
     throw new UsageError(`${id} ${reason}`);
   }

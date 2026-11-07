@@ -3,7 +3,8 @@ import { currentBranch, isRepo } from '../git.js';
 import { runItem, type EngineContext, type ItemOutcome } from '../engine.js';
 import { loadState } from '../state.js';
 import { notify } from '../notify.js';
-import { openProduct, runtimes, UsageError } from './context.js';
+import { openProduct, runtimes, UsageError, type Product } from './context.js';
+import { acquire } from '../lock.js';
 import { approve } from './review.js';
 
 export interface RunOptions {
@@ -24,6 +25,16 @@ export async function run(opts: RunOptions = {}): Promise<ItemOutcome[]> {
   const base = project.base_branch ?? 'main';
   if (currentBranch(paths.root) !== base) throw new UsageError(`check out ${base} first; items branch from it`);
   const ctx: EngineContext = { ...product, runtime: (n) => runtimes[n], log: opts.log, ...opts.context };
+  const unlock = acquire(paths.factory, 'run');
+  try {
+    return await buildAll(product, ctx, opts);
+  } finally {
+    unlock();
+  }
+}
+
+async function buildAll(product: Product, ctx: EngineContext, opts: RunOptions): Promise<ItemOutcome[]> {
+  const { paths, project } = product;
 
   const outcomes: ItemOutcome[] = [];
   for (;;) {
@@ -40,22 +51,25 @@ export async function run(opts: RunOptions = {}): Promise<ItemOutcome[]> {
       item = nextReady(items, loadState(paths.state));
     }
     if (!item) break;
-    let outcome = await runItem(ctx, item);
-    // With an integration branch, an item nothing flagged merges on its own; the owner releases batches later.
-    if (outcome.state === 'review' && project.integration_branch && !outcome.flags.length) {
-      try {
-        approve(item.id, paths.root);
-        outcome = { ...outcome, state: 'merged' };
-        opts.log?.(`${item.id} merged into ${project.integration_branch}`);
-      } catch (err) {
-        outcome = { ...outcome, state: 'blocked', reason: (err as Error).message };
-      }
-    }
+    const outcome = settle(product, await runItem(ctx, item), opts.log);
     outcomes.push(outcome);
     if (project.opt_ins?.notifications === 'desktop') {
       notify(`asf: ${item.id} ${outcome.state}`, outcome.reason ?? item.title);
     }
-    if (opts.item || !opts.all || outcome.state === 'blocked') break;
+    if (opts.item || !opts.all || outcome.state === 'blocked' || outcome.state === 'paused') break;
   }
   return outcomes;
+}
+
+/** With an integration branch, an item nothing flagged merges on its own; the owner releases batches later. */
+export function settle(product: Product, outcome: ItemOutcome, log?: (msg: string) => void): ItemOutcome {
+  const branch = product.project.integration_branch;
+  if (outcome.state !== 'review' || !branch || outcome.flags.length) return outcome;
+  try {
+    approve(outcome.id, product.paths.root);
+    log?.(`${outcome.id} merged into ${branch}`);
+    return { ...outcome, state: 'merged' };
+  } catch (err) {
+    return { ...outcome, state: 'blocked', reason: (err as Error).message };
+  }
 }

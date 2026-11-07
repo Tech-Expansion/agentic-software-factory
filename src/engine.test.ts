@@ -189,13 +189,26 @@ test('the tests are written once: a rejected item keeps them', async () => {
 });
 
 test('a runtime error blocks at once instead of retrying', async () => {
-  const rt = fake(() => ({ ok: false, error: 'usage limit reached' }));
+  const rt = fake(() => ({ ok: false, error: 'not logged in' }));
   const [out] = await run({ all: true, context: { runtime: () => rt } });
   assert.equal(out?.state, 'blocked');
   assert.equal(rt.calls.length, 1);
-  assert.match(out!.reason!, /usage limit/);
+  assert.match(out!.reason!, /not logged in/);
   const items = readEvents(join(root, '.factory/runs')).filter((e) => e.kind === 'agent');
   assert.equal(items[0]?.tokens?.total, 110);
+});
+
+test('a usage limit pauses the item where it was, instead of failing it', async () => {
+  let limited = true;
+  const rt = fake((c) => (limited ? { ok: false, error: 'usage limit reached', rateLimit: { status: 'rejected', resetsAt: 2_000_000_000 } } : c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(true) }));
+  const [paused] = await run({ all: true, context: { runtime: () => rt } });
+  assert.equal(paused?.state, 'paused');
+  assert.equal(paused?.resumeAt, 2_000_000_000_000);
+  assert.equal(loadState(join(root, '.factory/state.json')).items['B-0001']?.state, 'rework');
+  limited = false;
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  assert.equal(rt.testerCalls.length, 1, 'the tests from before the pause are kept');
 });
 
 test('a rejected item runs again with the reason as feedback', async () => {

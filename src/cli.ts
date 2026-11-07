@@ -11,6 +11,7 @@ import { UsageError } from './commands/context.js';
 import { discover } from './commands/discover.js';
 import { answer, clarify, questions, type ClarifyOutcome } from './commands/clarify.js';
 import { evaluate, formatEval } from './commands/eval.js';
+import { serve } from './commands/serve.js';
 import { sync } from './commands/sync.js';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
@@ -32,6 +33,9 @@ Usage:
   asf sync                          with a tracker: take in new tickets, post questions and
                                     results, apply the owner's answers and decisions
   asf run [--item <id>] [--all]     build the next ready item (or one, or all)
+  asf serve [--workers <n>] [--interval <s>] [--once]
+                                    work unattended: intake, questions, builds, n at a time;
+                                    Ctrl-C stops after the items in progress
   asf show <id>                     where an item's work is and why it stopped
   asf approve <id>                  approve a plan, or merge an item in review (into the
                                     integration branch when there is one)
@@ -71,6 +75,9 @@ async function main(argv: string[]): Promise<number> {
       reference: { type: 'boolean' },
       again: { type: 'boolean' },
       dry: { type: 'boolean' },
+      workers: { type: 'string' },
+      interval: { type: 'string' },
+      once: { type: 'boolean' },
       accept: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -123,6 +130,24 @@ async function main(argv: string[]): Promise<number> {
       const out = await clarify({ item: values.item, again: values.again, log: (m) => console.log(m) });
       if (!out.length) console.log('no new items');
       for (const o of out) console.log(clarified(o));
+      return 0;
+    }
+    case 'serve': {
+      const stop = new AbortController();
+      process.once('SIGINT', () => {
+        console.log('stopping after the items in progress; Ctrl-C again to quit now (they resume on the next start)');
+        stop.abort();
+        process.once('SIGINT', () => process.exit(130));
+      });
+      process.once('SIGTERM', () => stop.abort());
+      const r = await serve({
+        workers: values.workers ? Number(values.workers) : undefined,
+        intervalSeconds: values.interval ? Number(values.interval) : undefined,
+        rounds: values.once ? 1 : undefined,
+        signal: stop.signal,
+        log: (m) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`),
+      });
+      console.log(`stopped after ${r.rounds} round(s), ${r.outcomes.length} item(s) finished`);
       return 0;
     }
     case 'sync': {
