@@ -31,6 +31,8 @@ output is not documented.
   `/reject <reason>`, `/retry`. Comments by anyone else, and the factory's own (`acli` posts them as the owner), are
   never acted on. The factory moves tickets between statuses to show where work is; a status never decides anything.
 - Intake asks Jira for the owner's tickets only and checks the reporter again on what comes back.
+- The owner's view of the whole product lives on one ticket they choose (`tracker.digest`): a digest of each day,
+  and the board when they comment `/status`. Per-ticket status still shows on each ticket.
 - The JSON from `acli` is read defensively, from the shapes of Jira's REST API it wraps.
 
 ## Consequences

@@ -5,3 +5,4 @@
 .factory/clarify/
 .factory/tracker.json
 .factory/lock
+.factory/serve.json

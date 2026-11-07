@@ -7,6 +7,7 @@ import { acquire } from '../lock.js';
 import { notify } from '../notify.js';
 import { appendEvent } from '../runlog.js';
 import { loadState, saveState } from '../state.js';
+import { clearHeartbeat, writeHeartbeat } from '../status.js';
 import type { Tracker } from '../tracker/types.js';
 import { clarify } from './clarify.js';
 import { openProduct, runtimes, UsageError } from './context.js';
@@ -58,9 +59,22 @@ export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; 
     const outcomes: ItemOutcome[] = [];
     let pausedUntil = 0;
     let rounds = 0;
+    const started = new Date(now()).toISOString();
+    const beat = () =>
+      writeHeartbeat(paths.factory, {
+        pid: process.pid,
+        started,
+        workers,
+        round: rounds,
+        at: new Date(now()).toISOString(),
+        running: [...running.keys()],
+        paused_until: now() < pausedUntil ? new Date(pausedUntil).toISOString() : undefined,
+      });
 
     const start = (item: BacklogItem) => {
-      const p = runItem(ctx, item)
+      // Started on the next tick, so the heartbeat names the item before its first step runs.
+      const p = Promise.resolve()
+        .then(() => runItem(ctx, item))
         .then((o) => settle(product, o, log))
         .then((o) => {
           outcomes.push(o);
@@ -68,12 +82,17 @@ export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; 
           if (project.opt_ins?.notifications === 'desktop' && o.state !== 'merged') notify(`asf: ${o.id} ${o.state}`, o.reason ?? item.title);
         })
         .catch((err: Error) => log(`${item.id}: ${err.message}`))
-        .finally(() => running.delete(item.id));
+        .finally(() => {
+          running.delete(item.id);
+          beat();
+        });
       running.set(item.id, p);
+      beat();
     };
 
     while (!opts.signal?.aborted && (opts.rounds === undefined || rounds < opts.rounds)) {
       rounds++;
+      beat();
       if (now() < pausedUntil) {
         log(`paused by a usage limit until ${new Date(pausedUntil).toISOString()}`);
         await Promise.race([sleep(Math.min(pausedUntil - now(), interval)), ...running.values()]);
@@ -99,6 +118,7 @@ export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; 
         log(`${next.id} starting (${running.size + 1}/${workers})`);
         start(next);
       }
+      beat();
       // Wait for an item to finish or for the next look, whichever comes first.
       await Promise.race([sleep(interval), ...running.values()]);
       if (tracked && !running.size) {
@@ -113,6 +133,7 @@ export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; 
     if (tracked) await sync({ root: paths.root, tracker: opts.tracker, log }).catch((err: Error) => log(`sync: ${err.message}`));
     return { rounds, outcomes };
   } finally {
+    clearHeartbeat(paths.factory);
     unlock();
   }
 }

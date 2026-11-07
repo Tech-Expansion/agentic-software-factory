@@ -135,6 +135,11 @@
           "default": "To Do",
           "description": "Tickets in this status become new backlog items."
         },
+        "digest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A ticket the owner made for the product as a whole. The factory posts a digest of each day there, and the board whenever the owner comments \"/status\"."
+        },
         "statuses": {
           "type": "object",
           "additionalProperties": false,

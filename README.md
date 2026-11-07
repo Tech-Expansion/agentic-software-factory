@@ -72,7 +72,7 @@ asf init my-idea && cd my-idea
    `ready` only when you agree.
 3. `asf validate`: settings, policy and the links between backlog, specs and criteria.
 4. `asf run` builds the next ready item, `asf run --all` keeps going until one blocks or none is left.
-5. `asf report`, `asf show <id>`, then `asf approve <id>` or `asf reject <id> "<reason>"`.
+5. `asf status` shows every item and every decision waiting for you; `asf show <id>`, then `asf approve <id>` or `asf reject <id> "<reason>"`.
 
 ## Commands
 
@@ -84,9 +84,10 @@ asf init my-idea && cd my-idea
 | `asf clarify [--item id] [--again]` | The analyst reads `new` items and asks only what it must know; an item with nothing blocking becomes ready |
 | `asf questions` | Open questions, with options and the team's recommendation |
 | `asf answer <id> <Q> <answer>` / `asf answer <id> --accept` | Answer a question, or take every recommendation left; the decisions go into the item, which becomes ready |
-| `asf sync` | With a tracker in `project.yaml`: take in the owner's new tickets, post questions and results, apply the owner's comments (`Q1: ...`, `/accept`, `/approve`, `/reject <reason>`, `/retry`); see [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md) |
+| `asf sync` | With a tracker in `project.yaml`: take in the owner's new tickets, post questions and results, apply the owner's comments (`Q1: ...`, `/accept`, `/approve`, `/reject <reason>`, `/retry`). With `tracker.digest` set to a ticket, it posts a digest of each day there and the board whenever the owner comments `/status`; see [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md) |
 | `asf run [--item id] [--all]` | Build ready items unattended |
 | `asf serve [--workers n] [--interval s] [--once]` | Work unattended on an always-on host: sync, clarify, build up to n independent items at a time, report back. Idle rounds call no model; a usage limit pauses until the quota resets; a stop or crash resumes where it was. One process per product (`.factory/lock`) |
+| `asf status [--json]` | The board: each item's column, what `asf serve` is doing (from its heartbeat, `.factory/serve.json`), every decision waiting for you oldest first with how to give it, tokens today and this week |
 | `asf show <id>` | Branch, worktree, why it stopped, what needs your attention |
 | `asf approve <id>` | Approve a high-risk item's plan, or mark an item done and merge its branch: into the integration branch when `project.yaml` has one, otherwise into the base branch |
 | `asf release [--dry]` | Merge the integration branch into the base branch, as one batch ([ADR 0006](docs/adr/0006-integration-branch-and-batch-releases.md)) |
@@ -118,7 +119,7 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code, 
   container. Codex has no network but can read what its user can; the secret scan before each commit is the
   backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
-- Only the feature workflow exists. Learning from the run log, deployment and external trackers are not built yet.
+- Only the feature workflow exists, and deployment is not built. Jira is the only external tracker.
 - A builder call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),
   most of it served from cache.
 

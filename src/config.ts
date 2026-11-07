@@ -36,6 +36,8 @@ export interface TrackerConfig {
   owner: string;
   intake_status?: string;
   statuses?: Partial<Record<TrackedState, string>>;
+  /** A ticket for the owner's view of the whole product: a daily digest, and the board on "/status". */
+  digest?: string;
 }
 
 export interface Policy {

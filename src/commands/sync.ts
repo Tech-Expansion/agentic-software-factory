@@ -4,12 +4,14 @@ import { loadBacklog, type BacklogItem } from '../backlog.js';
 import { loadClarification, type Clarification } from '../clarify.js';
 import type { TrackedState } from '../config.js';
 import { commitFiles, currentBranch, isClean } from '../git.js';
-import { appendEvent } from '../runlog.js';
+import { appendEvent, day } from '../runlog.js';
+import { board, formatBoard } from '../status.js';
 import { loadState } from '../state.js';
 import { jira } from '../tracker/jira.js';
 import type { Tracker } from '../tracker/types.js';
 import { answer } from './clarify.js';
 import { openProduct, UsageError, type Product } from './context.js';
+import { report } from './report.js';
 import { approve, reject, retry } from './review.js';
 
 /** Marks the factory's own comments. acli signs in as the owner, so the author alone cannot tell them apart. */
@@ -28,6 +30,8 @@ interface Link {
 
 interface TrackerState {
   items: Record<string, Link>;
+  /** The digest ticket: comments read, and the last day a digest was posted for. */
+  digest?: { key: string; seen: string[]; day: string };
 }
 
 const stateFile = (p: Product) => join(p.paths.factory, 'tracker.json');
@@ -89,6 +93,7 @@ export interface SyncOptions {
   /** For tests; otherwise built from project.yaml. */
   tracker?: Tracker;
   log?: (msg: string) => void;
+  now?: () => Date;
 }
 
 /**
@@ -262,6 +267,25 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
         }
       }
       save();
+    }
+  }
+
+  // 4. The owner's view of the whole product, on one ticket: a digest each day, the board whenever they ask.
+  if (cfg?.digest) {
+    const now = opts.now?.() ?? new Date();
+    const today = day(now.toISOString());
+    if (links.digest?.key !== cfg.digest) links.digest = { key: cfg.digest, seen: (await tracker.comments(cfg.digest)).map((c) => c.id), day: today };
+    const d = links.digest;
+    const asks = (await fresh(d)).filter((c) => /^\s*\/status\b/im.test(c.body));
+    if (asks.length) {
+      await tracker.comment(d.key, `${MARK} Status at ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC\n\n${formatBoard(board(product, now), now)}`);
+      say(`${d.key}: status`);
+    }
+    if (d.day !== today) {
+      const yesterday = day(new Date(now.getTime() - 86_400_000).toISOString());
+      await tracker.comment(d.key, `${MARK} Digest\n\n${report(yesterday, paths.root)}`);
+      d.day = today;
+      say(`${d.key}: digest for ${yesterday}`);
     }
   }
   save();

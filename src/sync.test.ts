@@ -115,6 +115,28 @@ test('a ticket goes from intake to merged through the tracker alone, and only th
   assert.equal(j.comments['AI-7']!.filter((c) => /is in main/.test(c.body)).length, 1, 'said once');
 });
 
+test('the owner sees the whole product on the digest ticket: a digest each day, the board on /status', async () => {
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + '  digest: AI-1\n');
+  const j = memory([]);
+  j.add('AI-1', OWNER, '/status from before the factory');
+  let now = new Date('2026-11-07T10:00:00');
+  await sync({ tracker: j.tracker, now: () => now });
+  assert.equal(j.comments['AI-1']!.length, 1, 'nothing posted on the first look, old comments are not commands');
+  j.add('AI-1', 'acc-stranger', '/status');
+  j.add('AI-1', OWNER, 'where are we?\n/status');
+  await sync({ tracker: j.tracker, now: () => now });
+  assert.match(j.comments['AI-1']!.at(-1)!.body, /^\[asf\] Status at[\s\S]*Team: not running[\s\S]*Waiting for you \(0\)/);
+  assert.equal(j.comments['AI-1']!.length, 4, 'one status for the owner, none for the stranger');
+  await sync({ tracker: j.tracker, now: () => now });
+  assert.equal(j.comments['AI-1']!.length, 4);
+  now = new Date('2026-11-08T00:05:00');
+  await sync({ tracker: j.tracker, now: () => now });
+  await sync({ tracker: j.tracker, now: () => now });
+  assert.equal(j.comments['AI-1']!.filter((c) => c.body.startsWith('[asf] Digest')).length, 1, 'one digest a day');
+  assert.match(j.comments['AI-1']!.at(-1)!.body, /# wallet: report for 2026-11-07/);
+});
+
 test('answers and decisions are read from plain comments', () => {
   assert.deepEqual(parseAnswers('Thanks.\nQ1: web\nQ2) two-of-three\n  with a backup\n/accept'), { accept: true, answers: { Q1: 'web', Q2: 'two-of-three\nwith a backup' } });
   assert.deepEqual(parseDecision('ok\n/reject the fee is wrong\nuse min fee'), { kind: 'reject', reason: 'the fee is wrong\nuse min fee' });

@@ -7,7 +7,8 @@ import { ConfigError } from './config.js';
 import { GitError } from './git.js';
 import { factoryHome } from './paths.js';
 import { version } from './version.js';
-import { UsageError } from './commands/context.js';
+import { openProduct, UsageError } from './commands/context.js';
+import { board, formatBoard } from './status.js';
 import { discover } from './commands/discover.js';
 import { answer, clarify, questions, type ClarifyOutcome } from './commands/clarify.js';
 import { evaluate, formatEval } from './commands/eval.js';
@@ -36,6 +37,8 @@ Usage:
   asf serve [--workers <n>] [--interval <s>] [--once]
                                     work unattended: intake, questions, builds, n at a time;
                                     Ctrl-C stops after the items in progress
+  asf status [--json]               the board: what each item is doing, what the team is doing,
+                                    and every decision waiting for you, oldest first
   asf show <id>                     where an item's work is and why it stopped
   asf approve <id>                  approve a plan, or merge an item in review (into the
                                     integration branch when there is one)
@@ -79,6 +82,7 @@ async function main(argv: string[]): Promise<number> {
       interval: { type: 'string' },
       once: { type: 'boolean' },
       accept: { type: 'boolean' },
+      json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
@@ -113,6 +117,11 @@ async function main(argv: string[]): Promise<number> {
       const outcomes = await run({ item: values.item, all: values.all, log: (m) => console.log(m) });
       if (!outcomes.length) console.log('nothing is ready');
       return outcomes.some((o) => o.state === 'blocked') ? 2 : 0;
+    }
+    case 'status': {
+      const b = board(openProduct());
+      console.log(values.json ? JSON.stringify(b, null, 2) : formatBoard(b));
+      return 0;
     }
     case 'show':
       console.log(describe(need(0, 'item id')));
