@@ -2,6 +2,7 @@ id: js-bugfix-dates
 kind: build
 stack: javascript
 description: Fix a function that existing tests call correct, against a spec that says otherwise.
+suite: regression
 tags: [bugfix, existing-code]
 hidden:
   check:

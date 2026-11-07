@@ -1,0 +1,8 @@
+id: ts-native-script
+kind: build
+stack: typescript
+description: Cardano native scripts (multi-sig and time locks) from cardano-cli JSON, and the smallest set of signers a script needs.
+suite: capability
+tags: [feature, greenfield, domain-cardano, search]
+hidden:
+  check: ["node --test hidden-tests/*.test.ts"]

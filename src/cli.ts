@@ -29,9 +29,11 @@ Usage:
   asf retry <id>                    let a blocked item run again
   asf report [--date YYYY-MM-DD]    daily report
   asf projects                      products registered on this machine
-  asf eval [--case <id>] [--cases <dir>] [--out <file>] [--keep] [--reference]
-                                    build the eval cases and score them against hidden tests;
-                                    --reference checks the cases with their own solutions
+  asf eval [--case <id>] [--suite regression|capability] [--trials <k>]
+           [--cases <dir>] [--out <file>] [--keep] [--reference]
+                                    build the eval cases and score them against hidden tests,
+                                    k times each for pass^k; --reference checks the cases with
+                                    their own solutions
 `;
 
 async function main(argv: string[]): Promise<number> {
@@ -45,6 +47,8 @@ async function main(argv: string[]): Promise<number> {
       date: { type: 'string' },
       case: { type: 'string' },
       cases: { type: 'string' },
+      suite: { type: 'string' },
+      trials: { type: 'string' },
       out: { type: 'string' },
       keep: { type: 'boolean' },
       reference: { type: 'boolean' },
@@ -109,7 +113,16 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case 'eval': {
-      const r = await evaluate({ cases: values.cases, only: values.case, out: values.out, keep: values.keep, reference: values.reference, log: (m) => console.log(m) });
+      const r = await evaluate({
+        cases: values.cases,
+        only: values.case,
+        suite: values.suite,
+        trials: values.trials === undefined ? undefined : Number(values.trials),
+        out: values.out,
+        keep: values.keep,
+        reference: values.reference,
+        log: (m) => console.log(m),
+      });
       console.log(`\n${formatEval(r)}`);
       return r.summary.breaches || r.summary.errors ? 2 : 0;
     }

@@ -26,6 +26,11 @@ export interface EvalCase {
   kind: 'build';
   stack: string;
   description: string;
+  /**
+   * `regression` cases should stay near 100% and catch a version that got worse; `capability` cases start low and
+   * show whether a change made the factory able to do more.
+   */
+  suite: 'regression' | 'capability';
   tags?: string[];
   hidden: { check: string[] };
   dir: string;
@@ -41,7 +46,10 @@ export interface ItemResult {
 export interface CaseResult {
   id: string;
   stack: string;
+  suite: EvalCase['suite'];
   tags: string[];
+  /** 1-based; a case runs once per trial. */
+  trial: number;
   delivered: boolean;
   /** Every item that was ready got through on its first attempt. */
   firstAttempt: boolean;
@@ -57,6 +65,8 @@ export interface CaseResult {
   error?: string;
   /** Kept for inspection with `--keep`. */
   root?: string;
+  /** Where this run's agent transcripts were copied, for error analysis. */
+  transcripts?: string;
 }
 
 export function loadCases(dir: string, only?: string): EvalCase[] {
@@ -116,14 +126,24 @@ const head = (root: string, ref: string) => git(root, ['rev-parse', ref]).trim()
  */
 export async function runCase(
   c: EvalCase,
-  opts: { context?: Partial<EngineContext>; keep?: boolean; reference?: boolean; log?: (msg: string) => void } = {},
+  opts: {
+    context?: Partial<EngineContext>;
+    keep?: boolean;
+    reference?: boolean;
+    log?: (msg: string) => void;
+    trial?: number;
+    /** A folder to copy the agents' transcripts into. */
+    transcripts?: string;
+  } = {},
 ): Promise<CaseResult> {
   const started = Date.now();
   const root = mkdtempSync(join(tmpdir(), `asf-eval-${c.id}-`));
   const result: CaseResult = {
     id: c.id,
     stack: c.stack,
+    suite: c.suite,
     tags: c.tags ?? [],
+    trial: opts.trial ?? 1,
     delivered: false,
     firstAttempt: false,
     items: [],
@@ -163,6 +183,11 @@ export async function runCase(
     }
 
     const events = readEvents(paths.runs);
+    const saved = join(paths.runs, 'transcripts');
+    if (opts.transcripts && existsSync(saved)) {
+      cpSync(saved, opts.transcripts, { recursive: true });
+      result.transcripts = opts.transcripts;
+    }
     const agent = events.filter((e) => e.kind === 'agent');
     result.tokens = agent.reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
     result.agentSteps = agent.length;
@@ -210,27 +235,66 @@ const quantile = (xs: number[], q: number) => {
   return s[Math.min(s.length - 1, Math.ceil(q * s.length) - 1)]!;
 };
 
+export interface SuiteSummary {
+  cases: number;
+  /** Cases delivered in every trial: pass^k, the consistency the owner relies on. */
+  passAll: number;
+  passAllInterval: [number, number];
+  /** Cases delivered in at least one trial: pass@k, what is possible at all. */
+  passAny: number;
+}
+
 export interface EvalSummary {
   cases: number;
+  trials: number;
+  /** Case runs, cases × trials. */
+  runs: number;
   delivered: number;
   rate: number;
   interval: [number, number];
   firstAttempt: number;
+  passAll: number;
+  passAny: number;
+  suites: Partial<Record<EvalCase['suite'], SuiteSummary>>;
   breaches: number;
   errors: number;
   tokensMedian: number;
   tokensP90: number;
 }
 
+function suiteSummary(byCase: CaseResult[][]): SuiteSummary {
+  const passAll = byCase.filter((runs) => runs.every((r) => r.delivered)).length;
+  return {
+    cases: byCase.length,
+    passAll,
+    passAllInterval: wilson(passAll, byCase.length),
+    passAny: byCase.filter((runs) => runs.some((r) => r.delivered)).length,
+  };
+}
+
 export function summarize(results: CaseResult[]): EvalSummary {
   const delivered = results.filter((r) => r.delivered).length;
   const tokens = results.map((r) => r.tokens);
+  const byCase = new Map<string, CaseResult[]>();
+  for (const r of results) byCase.set(r.id, [...(byCase.get(r.id) ?? []), r]);
+  const groups = [...byCase.values()];
+  const all = suiteSummary(groups);
+  const suites: EvalSummary['suites'] = {};
+  for (const suite of ['regression', 'capability'] as const) {
+    const g = groups.filter((runs) => runs[0]!.suite === suite);
+    if (g.length) suites[suite] = suiteSummary(g);
+  }
   return {
-    cases: results.length,
+    cases: groups.length,
+    trials: Math.max(0, ...results.map((r) => r.trial)),
+    runs: results.length,
     delivered,
     rate: results.length ? delivered / results.length : 0,
     interval: wilson(delivered, results.length),
     firstAttempt: results.filter((r) => r.firstAttempt).length,
+    passAll: all.passAll,
+    passAny: all.passAny,
+    suites,
     breaches: results.reduce((n, r) => n + r.breaches.length, 0),
     errors: results.filter((r) => r.error).length,
     tokensMedian: quantile(tokens, 0.5),

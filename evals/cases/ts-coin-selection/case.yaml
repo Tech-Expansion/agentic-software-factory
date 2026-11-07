@@ -1,0 +1,8 @@
+id: ts-coin-selection
+kind: build
+stack: typescript
+description: Coin selection for a multi-asset UTxO wallet, with the fee and change that depend on each other, min-UTxO and an input limit.
+suite: capability
+tags: [feature, greenfield, domain-cardano, bigint]
+hidden:
+  check: ["node --test hidden-tests/*.test.ts"]

@@ -30,7 +30,7 @@ opt_ins:
 
 /** Two items: B-0001 is ready, B-0002 is still a draft and must never be built. */
 function makeCase(dir: string, id: string) {
-  put(join(dir, id, 'case.yaml'), `id: ${id}\nkind: build\nstack: shell\ndescription: say hi\nhidden:\n  check: ["sh hidden-check.sh"]\n`);
+  put(join(dir, id, 'case.yaml'), `id: ${id}\nkind: build\nstack: shell\ndescription: say hi\nsuite: regression\nhidden:\n  check: ["sh hidden-check.sh"]\n`);
   put(join(dir, id, 'product/.factory/project.yaml'), project(id));
   put(join(dir, id, 'product/specs/hello.md'), '# Hello\n\n## Acceptance criteria\n- AC-001: hello.txt says hi.\n');
   put(join(dir, id, 'product/backlog/0001-hello.md'), '---\nid: B-0001\ntitle: Say hi\nstatus: ready\nspec: specs/hello.md\ncriteria: [AC-001]\n---\nWrite hi to hello.txt.\n');
@@ -76,9 +76,36 @@ test('eval: hidden tests decide delivery, drafts are left alone, results are wri
   assert.ok(!existsSync(list) || !readFileSync(list, 'utf8').includes('good'), 'fixtures stay out of the user list');
 });
 
+test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', async () => {
+  const cases = mkdtempSync(join(tmpdir(), 'asf-cases-'));
+  makeCase(cases, 'steady');
+  makeCase(cases, 'flaky');
+  const out = join(mkdtempSync(join(tmpdir(), 'asf-out-')), 'r.json');
+  let flakyWrites = 0;
+  const rt: Runtime = {
+    name: 'claude-code',
+    async call(c): Promise<AgentResult> {
+      if (c.access === 'write') {
+        const flaky = c.cwd.includes('asf-eval-flaky-');
+        writeFileSync(join(c.cwd, 'hello.txt'), flaky && ++flakyWrites > 1 ? 'hello' : 'hi');
+      }
+      return { ok: true, text: 'done', structured: pass, tokens: { input: 1, cached_input: 0, output: 1, total: 2 }, durationMs: 1, transcript: '{"type":"result"}\n' };
+    },
+    interactive: async () => 0,
+  };
+  const r = await evaluate({ cases, out, trials: 3, context: { runtime: () => rt } });
+  assert.equal(r.summary.runs, 6);
+  assert.equal(r.summary.trials, 3);
+  assert.deepEqual(r.summary.suites.regression && { all: r.summary.suites.regression.passAll, any: r.summary.suites.regression.passAny }, { all: 1, any: 2 });
+  assert.deepEqual(r.cases.map((c) => `${c.id}#${c.trial}:${c.delivered}`), ['flaky#1:true', 'flaky#2:false', 'flaky#3:false', 'steady#1:true', 'steady#2:true', 'steady#3:true']);
+  const t = r.cases[0]!.transcripts!;
+  assert.match(t, /r-transcripts\/flaky-t1$/);
+  assert.equal(readFileSync(join(t, 'B-0001', 'a1-build.jsonl'), 'utf8'), '{"type":"result"}\n');
+});
+
 test('eval: an invalid case is refused before anything runs', async () => {
   const cases = mkdtempSync(join(tmpdir(), 'asf-cases-'));
-  put(join(cases, 'x', 'case.yaml'), 'id: y\nkind: build\nstack: s\ndescription: d\nhidden:\n  check: ["true"]\n');
+  put(join(cases, 'x', 'case.yaml'), 'id: y\nkind: build\nstack: s\ndescription: d\nsuite: regression\nhidden:\n  check: ["true"]\n');
   put(join(cases, 'x', 'product/README.md'), '');
   await assert.rejects(evaluate({ cases }), /does not match its folder/);
 });
