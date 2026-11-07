@@ -19,7 +19,9 @@
       "minLength": 1
     },
     "status": {
+      "description": "new: waiting for clarification. draft: parked by the owner. ready: clear to build. done: merged.",
       "enum": [
+        "new",
         "draft",
         "ready",
         "done"
@@ -47,6 +49,16 @@
         "type": "string",
         "pattern": "^B-[0-9]{4}$"
       }
+    },
+    "tracker": {
+      "type": "string",
+      "description": "The ticket this item comes from, for example AI-12."
+    },
+    "risk": {
+      "enum": [
+        "high"
+      ],
+      "description": "high: a plan is approved by the owner before the build, and the change is approved on its own before it merges. For keys, signing, money, auth."
     }
   }
 }

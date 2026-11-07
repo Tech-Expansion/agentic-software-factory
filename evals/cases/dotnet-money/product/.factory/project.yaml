@@ -1,0 +1,11 @@
+factory_version: "0.1.0"
+name: dotnet-money
+stage: grow
+base_branch: main
+runtimes:
+  default: claude-code
+commands:
+  setup: ["dotnet restore tests/Ledger.Tests"]
+  check: ["dotnet test tests/Ledger.Tests"]
+opt_ins:
+  notifications: none

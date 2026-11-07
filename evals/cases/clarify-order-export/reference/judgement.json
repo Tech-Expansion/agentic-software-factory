@@ -1,0 +1,33 @@
+{
+  "gaps": [
+    {
+      "id": "which-orders",
+      "covered": "asked",
+      "by": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "status",
+      "covered": "asked",
+      "by": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "timezone",
+      "covered": "asked",
+      "by": [
+        "Q3"
+      ]
+    },
+    {
+      "id": "size",
+      "covered": "asked",
+      "by": [
+        "Q4"
+      ]
+    }
+  ],
+  "needless": []
+}

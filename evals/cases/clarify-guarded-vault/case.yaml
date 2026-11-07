@@ -1,0 +1,21 @@
+id: clarify-guarded-vault
+kind: clarify
+stack: none
+description: A multi-sig vault with a guardian key, whose requirement leaves the platform open and contradicts itself on key loss.
+suite: capability
+tags: [clarify, domain-cardano, contradiction]
+gaps:
+  - id: platform
+    gap: Where the tool runs (web app, browser extension, mobile or desktop) is not said.
+  - id: guardian-loss
+    gap: The guardian must sign every payment, yet losing any one device, the guardian's included, must not lose the funds. Which recovery path (a backup guardian, a time lock, something else) resolves this is open.
+  - id: proposal-transport
+    gap: How a payment proposal and its signatures travel between co-signers is open, given that no server may hold keys (a relay for unsigned transactions, or out of band).
+  - id: chain-data
+    gap: Where the tool reads the chain from (a public API, its own node) and who pays for it, for a tool that must be free, is open.
+settled:
+  - It runs on preprod first.
+  - Keys never leave the members' devices, and no server holds keys or signs.
+  - Members and the guardian sign with Ledger hardware wallets.
+  - The guardian's signature is required for every payment.
+  - The tool is free for the community.

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/plan.schema.json",
+  "title": "A plan for a high-risk item, for the owner to approve before the build",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["approach", "files", "tests", "risks"],
+  "properties": {
+    "approach": { "type": "string", "minLength": 1, "description": "How the item will be built, in a few sentences." },
+    "files": { "type": "array", "items": { "type": "string" }, "description": "Files to add or change." },
+    "tests": { "type": "array", "items": { "type": "string" }, "description": "How each criterion and each risk will be tested." },
+    "risks": { "type": "array", "items": { "type": "string" }, "description": "What could go wrong, and how the plan prevents it." }
+  }
+}

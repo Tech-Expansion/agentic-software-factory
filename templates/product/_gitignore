@@ -2,3 +2,8 @@
 .factory/runs/
 .factory/worktrees/
 .factory/state.json
+.factory/clarify/
+.factory/tracker.json
+.factory/lock
+.factory/serve.json
+.factory/lessons.json

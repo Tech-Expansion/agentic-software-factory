@@ -1,0 +1,8 @@
+id: js-csv-two-items
+kind: build
+stack: javascript
+description: Two items where the second builds on the first, and a draft item that must not be built.
+suite: regression
+tags: [feature, dependencies, ready-gate]
+hidden:
+  check: ["node --test hidden-tests/*.test.js"]

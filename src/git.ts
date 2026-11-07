@@ -55,6 +55,16 @@ export function restorePaths(worktree: string, base: string, paths: string[]): v
   }
 }
 
+export function isAncestor(cwd: string, commit: string, of = 'HEAD'): boolean {
+  return spawnSync('git', ['merge-base', '--is-ancestor', commit, of], { cwd }).status === 0;
+}
+
+/** Commits only the given files, so whatever else the owner has in the checkout stays out of it. */
+export function commitFiles(cwd: string, files: string[], message: string): void {
+  git(cwd, ['add', '--', ...files]);
+  git(cwd, ['commit', '-q', '-F', '-', '--', ...files], false, message);
+}
+
 export function commitAll(cwd: string, message: string): boolean {
   git(cwd, ['add', '-A']);
   if (git(cwd, ['diff', '--cached', '--name-only']).trim() === '') return false;

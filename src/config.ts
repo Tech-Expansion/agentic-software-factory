@@ -20,21 +20,63 @@ export interface ProjectConfig {
   success_metric?: string;
   kill_criteria?: string;
   base_branch?: string;
+  integration_branch?: string;
   runtimes?: { default?: RuntimeName; roles?: Record<string, RuntimeName> };
   models?: Record<string, string>;
   commands: { setup?: string[]; check: string[] };
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
+  tracker?: TrackerConfig;
+}
+
+export type TrackedState = 'clarifying' | 'ready' | 'in_progress' | 'review' | 'done' | 'blocked';
+
+export interface TrackerConfig {
+  kind: 'jira';
+  project: string;
+  owner: string;
+  intake_status?: string;
+  /** More JQL the intake must match, for a project shared by several products. */
+  intake_filter?: string;
+  statuses?: Partial<Record<TrackedState, string>>;
+  /** A ticket for the owner's view of the whole product: a daily digest, and the board on "/status". */
+  digest?: string;
 }
 
 export interface Policy {
   max_attempts: number;
   max_tokens_per_item: number;
+  check_rounds_in_session: number;
   denied_commands: string[];
   approval_paths: string[];
   protected_paths: string[];
+  sensitive_paths: string[];
+  test_paths: string[];
+  secret_patterns: string[];
+  sandbox: SandboxPolicy;
+}
+
+export interface SandboxPolicy {
+  network_allow: string[];
+  deny_read: string[];
+  write_allow: string[];
+  secret_env: string[];
+  /** Lets sandboxed processes listen and connect on loopback (test runners that talk over a local socket). */
+  local_binding: boolean;
 }
 
 export class ConfigError extends Error {}
+
+const VENDOR_UNSUPPORTED = new Set(['$schema', '$id', 'title', 'minLength', 'maxLength', 'pattern', 'format', 'minItems', 'maxItems']);
+
+/**
+ * A schema as sent to a CLI's structured-output mode, which rejects some JSON Schema keywords. The runner still
+ * validates the answer against the full schema.
+ */
+export function vendorSchema(name: string): object {
+  const strip = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => !VENDOR_UNSUPPORTED.has(k)).map(([k, x]) => [k, strip(x)])) : v;
+  return strip(loadSchema(name)) as object;
+}
 
 export function loadSchema(name: string): object {
   return JSON.parse(readFileSync(join(factoryRoot, 'schemas', `${name}.schema.json`), 'utf8')) as object;
@@ -75,14 +117,26 @@ export function loadDefaultPolicy(): Policy {
 }
 
 /** A product policy can only tighten the default: limits take the lower value, lists are added to. */
-export function mergePolicy(base: Policy, override: Partial<Policy>): Policy {
+export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbox'>> & { sandbox?: Partial<SandboxPolicy> }): Policy {
   const union = (a: string[], b: string[] | undefined) => [...new Set([...a, ...(b ?? [])])];
   return {
     max_attempts: Math.min(base.max_attempts, override.max_attempts ?? Infinity),
     max_tokens_per_item: Math.min(base.max_tokens_per_item, override.max_tokens_per_item ?? Infinity),
+    check_rounds_in_session: Math.min(base.check_rounds_in_session ?? 0, override.check_rounds_in_session ?? Infinity),
     denied_commands: union(base.denied_commands, override.denied_commands),
     approval_paths: union(base.approval_paths, override.approval_paths),
     protected_paths: union(base.protected_paths, override.protected_paths),
+    sensitive_paths: union(base.sensitive_paths, override.sensitive_paths),
+    test_paths: union(base.test_paths, override.test_paths),
+    secret_patterns: union(base.secret_patterns, override.secret_patterns),
+    sandbox: {
+      // The one list a product widens: the hosts it needs. Only the owner can edit .factory/policy.yaml.
+      network_allow: union(base.sandbox.network_allow, override.sandbox?.network_allow),
+      deny_read: union(base.sandbox.deny_read, override.sandbox?.deny_read),
+      write_allow: base.sandbox.write_allow,
+      secret_env: union(base.sandbox.secret_env, override.sandbox?.secret_env),
+      local_binding: base.sandbox.local_binding || (override.sandbox?.local_binding ?? false),
+    },
   };
 }
 

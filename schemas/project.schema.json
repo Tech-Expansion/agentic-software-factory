@@ -4,40 +4,81 @@
   "title": "Factory settings of one product (.factory/project.yaml)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["factory_version", "name", "stage", "commands"],
+  "required": [
+    "factory_version",
+    "name",
+    "stage",
+    "commands"
+  ],
   "properties": {
-    "factory_version": { "type": "string", "description": "Factory version this product was set up with." },
-    "name": { "type": "string", "minLength": 1 },
-    "stage": { "enum": ["explore", "validate", "grow"] },
-    "hypothesis": { "type": "string" },
-    "success_metric": { "type": "string" },
-    "kill_criteria": { "type": "string" },
-    "base_branch": { "type": "string", "default": "main" },
+    "factory_version": {
+      "type": "string",
+      "description": "Factory version this product was set up with."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "enum": [
+        "explore",
+        "validate",
+        "grow"
+      ]
+    },
+    "hypothesis": {
+      "type": "string"
+    },
+    "success_metric": {
+      "type": "string"
+    },
+    "kill_criteria": {
+      "type": "string"
+    },
+    "base_branch": {
+      "type": "string",
+      "default": "main"
+    },
     "runtimes": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "default": { "$ref": "#/definitions/runtime" },
+        "default": {
+          "$ref": "#/definitions/runtime"
+        },
         "roles": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/definitions/runtime" }
+          "additionalProperties": {
+            "$ref": "#/definitions/runtime"
+          }
         }
       }
     },
     "models": {
       "type": "object",
       "description": "Model per role, passed to the CLI as is. Unset roles use the CLI default.",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "commands": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["check"],
+      "required": [
+        "check"
+      ],
       "properties": {
-        "setup": { "type": "array", "items": { "type": "string" } },
+        "setup": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "check": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Lint, build and test commands. Run by the runner before any model review."
         }
       }
@@ -46,13 +87,103 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "backlog": { "enum": ["markdown"] },
-        "docs": { "enum": ["markdown"] },
-        "notifications": { "enum": ["desktop", "none"] }
+        "backlog": {
+          "enum": [
+            "markdown"
+          ]
+        },
+        "docs": {
+          "enum": [
+            "markdown"
+          ]
+        },
+        "notifications": {
+          "enum": [
+            "desktop",
+            "none"
+          ]
+        }
       }
+    },
+    "tracker": {
+      "description": "Where tickets and the conversation with the owner live. Unset: the backlog/ folder is the tracker.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "project",
+        "owner"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "jira"
+          ]
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Jira project key, for example AI."
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The owner's Atlassian account id. Only tickets they reported and comments they wrote count; everything else is untrusted data."
+        },
+        "intake_status": {
+          "type": "string",
+          "default": "To Do",
+          "description": "Tickets in this status become new backlog items."
+        },
+        "intake_filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "More JQL a ticket must match to be taken in, for a project several products share, for example: labels = cardano-wallet AND issuetype != Epic. The owner-only rule still applies."
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A ticket the owner made for the product as a whole. The factory posts a digest of each day there, and the board whenever the owner comments \"/status\"."
+        },
+        "statuses": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Statuses the factory moves tickets to, to show where they are. Unset ones are left alone.",
+          "properties": {
+            "clarifying": {
+              "type": "string"
+            },
+            "ready": {
+              "type": "string"
+            },
+            "in_progress": {
+              "type": "string"
+            },
+            "review": {
+              "type": "string"
+            },
+            "done": {
+              "type": "string"
+            },
+            "blocked": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "integration_branch": {
+      "type": "string",
+      "minLength": 1,
+      "description": "When set, items branch from it and those that pass checks and review merge into it on their own; the owner releases it into base_branch in batches with `asf release`. Items that touch approval or sensitive paths, or are high risk, still wait for the owner one by one."
     }
   },
   "definitions": {
-    "runtime": { "enum": ["claude-code", "codex"] }
+    "runtime": {
+      "enum": [
+        "claude-code",
+        "codex"
+      ]
+    }
   }
 }

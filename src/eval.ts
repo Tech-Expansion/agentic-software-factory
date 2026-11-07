@@ -1,0 +1,410 @@
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import { parse } from 'yaml';
+import { loadBacklog } from './backlog.js';
+import { formatChecks, runChecks } from './checks.js';
+import { clarify } from './commands/clarify.js';
+import { openProduct, runtimes } from './commands/context.js';
+import { loadClarification, type Clarification } from './clarify.js';
+import { ConfigError, loadPolicy, runtimeFor, validate, vendorSchema } from './config.js';
+import type { EngineContext } from './engine.js';
+import { git } from './git.js';
+import { factoryRoot, productPaths } from './paths.js';
+import { matchesAny } from './glob.js';
+import { readEvents } from './runlog.js';
+import { init } from './commands/init.js';
+import { approve } from './commands/review.js';
+import { run } from './commands/run.js';
+import { noTokens, type Runtime } from './runtimes/types.js';
+
+/**
+ * An eval case is a small product with a backlog, plus acceptance tests the agents never see.
+ * Folder layout: `case.yaml`, `product/` (laid over a fresh `asf init`), `hidden/` (copied in after delivery) and
+ * `reference/<item id>/`, a known-good solution used only to check the case itself (`asf eval --reference`).
+ */
+export interface EvalCase {
+  id: string;
+  /** build: deliver the backlog, scored by hidden tests. clarify: read one new item, scored by the gaps it asks about. */
+  kind: 'build' | 'clarify';
+  stack: string;
+  description: string;
+  /**
+   * `regression` cases should stay near 100% and catch a version that got worse; `capability` cases start low and
+   * show whether a change made the factory able to do more.
+   */
+  suite: 'regression' | 'capability';
+  tags?: string[];
+  hidden?: { check: string[] };
+  /** clarify: what the requirement leaves open, which a good analyst asks about. */
+  gaps?: { id: string; gap: string }[];
+  /** clarify: what the requirement settles, which asking about is needless. */
+  settled?: string[];
+  dir: string;
+}
+
+export interface ClarifyScore {
+  gaps: number;
+  /** Gaps a question covers. */
+  asked: number;
+  /** Gaps an explicit assumption covers instead: the owner sees it, but is not asked. */
+  assumed: number;
+  missed: string[];
+  /** Questions about what the requirement already settles. */
+  needless: string[];
+  questions: number;
+}
+
+export interface ItemResult {
+  id: string;
+  state: string;
+  attempts: number;
+  reason?: string;
+}
+
+export interface CaseResult {
+  id: string;
+  stack: string;
+  suite: EvalCase['suite'];
+  tags: string[];
+  /** 1-based; a case runs once per trial. */
+  trial: number;
+  delivered: boolean;
+  /** Every item that was ready got through on its first attempt. */
+  firstAttempt: boolean;
+  items: ItemResult[];
+  hidden?: { ok: boolean; output: string };
+  /** Hard-gate breaches. Any one of them fails the whole eval run. */
+  breaches: string[];
+  /** Tool calls the CLI refused. Not a breach, but it shows what an agent tried, for example after an injection. */
+  denied: string[];
+  tokens: number;
+  agentSteps: number;
+  durationMs: number;
+  error?: string;
+  /** Kept for inspection with `--keep`. */
+  root?: string;
+  /** Where this run's agent transcripts were copied, for error analysis. */
+  transcripts?: string;
+  clarify?: ClarifyScore;
+}
+
+export function loadCases(dir: string, only?: string): EvalCase[] {
+  if (!existsSync(dir)) throw new ConfigError(`no eval cases in ${dir}`);
+  const cases: EvalCase[] = [];
+  for (const name of readdirSync(dir).sort()) {
+    const file = join(dir, name, 'case.yaml');
+    if (!existsSync(file)) continue;
+    const data = parse(readFileSync(file, 'utf8')) as Omit<EvalCase, 'dir'>;
+    const errors = validate('eval-case', data);
+    if (errors.length) throw new ConfigError(`${file}:\n  ${errors.join('\n  ')}`);
+    if (data.id !== name) throw new ConfigError(`${file}: id ${data.id} does not match its folder ${name}`);
+    if (!existsSync(join(dir, name, 'product'))) throw new ConfigError(`${join(dir, name)}: no product/ folder`);
+    if (!only || data.id === only) cases.push({ ...data, dir: join(dir, name) });
+  }
+  if (only && !cases.length) throw new ConfigError(`no eval case ${only} in ${dir}`);
+  return cases;
+}
+
+const read = <T>(file: string) => JSON.parse(readFileSync(file, 'utf8')) as T;
+
+/** The judgement of an analysis against the case's gaps. The judge sees the gaps; the analyst never does. */
+interface Judgement {
+  gaps: { id: string; covered: 'asked' | 'assumed' | 'missed'; by: string[] }[];
+  needless: { question: string; reason: string }[];
+}
+
+function judgePrompt(c: EvalCase, requirement: string, cl: Clarification): string {
+  return [
+    `## Requirement\n\n${requirement}`,
+    `## Gaps the requirement leaves open\n\n${c.gaps!.map((g) => `- ${g.id}: ${g.gap}`).join('\n')}`,
+    `## What the requirement settles\n\n${(c.settled ?? []).map((s) => `- ${s}`).join('\n') || '(nothing listed)'}`,
+    `## The analyst's questions\n\n${cl.questions.map((q) => `- ${q.id}${q.blocking ? ' [blocking]' : ''}: ${q.question}`).join('\n') || '(none)'}`,
+    `## The analyst's assumptions\n\n${cl.assumptions.map((a, i) => `- A${i + 1}: ${a}`).join('\n') || '(none)'}`,
+  ].join('\n\n');
+}
+
+/**
+ * A clarify case: the analyst reads the one new item, a judge marks which planted gaps its questions or assumptions
+ * cover and which questions ask about what is settled. Delivered when no gap is missed and at most one question is
+ * needless; asked and assumed are reported apart.
+ */
+async function clarifyCase(
+  c: EvalCase,
+  root: string,
+  result: CaseResult,
+  opts: { context?: Partial<EngineContext>; reference?: boolean; transcripts?: string },
+): Promise<CaseResult> {
+  const before = head(root, 'HEAD');
+  const [outcome] = await clarify({ root, context: opts.context });
+  if (!outcome) throw new ConfigError('a clarify case needs one item with status new');
+  const { paths, project, policy } = openProduct(root);
+  const events = readEvents(paths.runs).filter((e) => e.kind === 'agent');
+  result.tokens = events.reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
+  result.agentSteps = events.length;
+  result.denied = events.flatMap((e) => e.denied ?? []);
+  const saved = join(paths.runs, 'transcripts');
+  if (opts.transcripts && existsSync(saved)) {
+    cpSync(saved, opts.transcripts, { recursive: true });
+    result.transcripts = opts.transcripts;
+  }
+  const changed = git(root, ['diff', '--name-only', before]).split('\n').filter(Boolean).filter((f) => !f.startsWith('backlog/'));
+  if (changed.length) result.breaches.push(`the analyst changed files: ${changed.join(', ')}`);
+  if (git(root, ['status', '--porcelain', '--untracked-files=no']).trim()) result.breaches.push('the analyst left changes in the checkout');
+
+  const cl = loadClarification(paths.factory, outcome.id)!;
+  let j: Judgement;
+  if (opts.reference) {
+    j = read<Judgement>(join(c.dir, 'reference', 'judgement.json'));
+  } else {
+    const item = loadBacklog(paths.backlog).items.find((i) => i.id === outcome.id)!;
+    const rt = (opts.context?.runtime ?? ((n) => runtimes[n]))(runtimeFor(project, 'judge'));
+    const r = await rt.call({
+      cwd: root,
+      systemPrompt: readFileSync(join(factoryRoot, 'evals', 'judge-clarify.md'), 'utf8'),
+      prompt: judgePrompt(c, item.body, cl),
+      access: 'read',
+      schema: vendorSchema('clarify-judgement'),
+      allowedCommands: [],
+      deniedCommands: [],
+      protectedPaths: [],
+      sandbox: policy.sandbox,
+    });
+    const errors = r.ok ? validate('clarify-judgement', r.structured) : [r.error ?? 'judge failed'];
+    if (errors.length) throw new Error(`the judge failed: ${errors.join('; ')}`);
+    j = r.structured as Judgement;
+  }
+  const covered = new Map(j.gaps.map((g) => [g.id, g.covered]));
+  const ids = c.gaps!.map((g) => g.id);
+  const missed = ids.filter((id) => (covered.get(id) ?? 'missed') === 'missed');
+  result.clarify = {
+    gaps: ids.length,
+    asked: ids.filter((id) => covered.get(id) === 'asked').length,
+    assumed: ids.filter((id) => covered.get(id) === 'assumed').length,
+    missed,
+    needless: j.needless.map((n) => n.question),
+    questions: cl.questions.length,
+  };
+  result.delivered = !missed.length && j.needless.length <= 1 && !result.breaches.length;
+  result.firstAttempt = result.delivered;
+  return result;
+}
+
+/** Stands in for the agents with the case's own solution, so a case can be checked without spending tokens. */
+export function referenceRuntime(c: EvalCase): Runtime {
+  const done = (r: Partial<Awaited<ReturnType<Runtime['call']>>>) => ({ ok: true, text: 'reference', tokens: noTokens(), durationMs: 0, ...r });
+  return {
+    name: 'claude-code',
+    async call(call) {
+      if (c.kind === 'clarify') return done({ structured: read(join(c.dir, 'reference', 'analysis.json')) });
+      const id = basename(call.cwd);
+      if (call.access === 'write') {
+        const src = join(c.dir, 'reference', id);
+        if (!existsSync(src)) return done({ ok: false, error: `no reference solution for ${id}` });
+        cpSync(src, call.cwd, { recursive: true });
+        return done({});
+      }
+      const criteria = loadBacklog(join(call.cwd, 'backlog')).items.find((i) => i.id === id)?.criteria ?? [];
+      return done({ structured: { verdict: 'pass', criteria: criteria.map((ac) => ({ id: ac, status: 'met', evidence: 'reference' })), findings: [], summary: 'reference' } });
+    },
+    interactive: async () => 0,
+  };
+}
+
+/** Hidden checks that pass on the untouched fixture cannot tell delivered work from no work. */
+function hiddenPassesWithoutWork(c: EvalCase): boolean {
+  const bare = mkdtempSync(join(tmpdir(), `asf-eval-bare-${c.id}-`));
+  try {
+    cpSync(join(c.dir, 'product'), bare, { recursive: true });
+    if (existsSync(join(c.dir, 'hidden'))) cpSync(join(c.dir, 'hidden'), bare, { recursive: true });
+    return runChecks(bare, c.hidden!.check, loadPolicy(productPaths(bare)).sandbox).every((r) => r.ok);
+  } finally {
+    rmSync(bare, { recursive: true, force: true });
+  }
+}
+
+const head = (root: string, ref: string) => git(root, ['rev-parse', ref]).trim();
+
+/**
+ * Builds a case end to end the way an unattended run would: one item at a time, each merged as soon as it passes
+ * review (standing in for the owner's approval), then the hidden checks on the result.
+ */
+export async function runCase(
+  c: EvalCase,
+  opts: {
+    context?: Partial<EngineContext>;
+    keep?: boolean;
+    reference?: boolean;
+    log?: (msg: string) => void;
+    trial?: number;
+    /** A folder to copy the agents' transcripts into. */
+    transcripts?: string;
+  } = {},
+): Promise<CaseResult> {
+  const started = Date.now();
+  const root = mkdtempSync(join(tmpdir(), `asf-eval-${c.id}-`));
+  const result: CaseResult = {
+    id: c.id,
+    stack: c.stack,
+    suite: c.suite,
+    tags: c.tags ?? [],
+    trial: opts.trial ?? 1,
+    delivered: false,
+    firstAttempt: false,
+    items: [],
+    breaches: [],
+    denied: [],
+    tokens: 0,
+    agentSteps: 0,
+    durationMs: 0,
+  };
+  const context = opts.reference ? { ...opts.context, runtime: () => referenceRuntime(c) } : opts.context;
+  try {
+    if (opts.reference && c.kind === 'build' && hiddenPassesWithoutWork(c)) throw new ConfigError('the hidden checks pass without any work');
+    init(root, c.id);
+    cpSync(join(c.dir, 'product'), root, { recursive: true });
+    git(root, ['config', 'user.name', 'asf eval']);
+    git(root, ['config', 'user.email', 'asf-eval@example.invalid']);
+    git(root, ['add', '-A']);
+    git(root, ['commit', '-q', '-m', 'eval fixture']);
+    if (c.kind === 'clarify') return await clarifyCase(c, root, result, { ...opts, context });
+
+    const { paths, project, policy } = openProduct(root);
+    const base = project.base_branch ?? 'main';
+    const initial = loadBacklog(paths.backlog);
+    if (initial.errors.length) throw new ConfigError(`fixture backlog: ${initial.errors.join('; ')}`);
+    // Not ready means never built, whether parked (draft) or waiting for answers (new).
+    const drafts = initial.items.filter((i) => i.status === 'draft' || i.status === 'new').map((i) => i.id);
+    const ready = initial.items.filter((i) => i.status === 'ready').map((i) => i.id);
+
+    for (let guard = 0; guard <= ready.length; guard++) {
+      const baseHead = head(root, base);
+      const [outcome] = await run({ root, context, log: opts.log });
+      if (!outcome) break;
+      if (head(root, base) !== baseHead) result.breaches.push(`${outcome.id}: ${base} changed before approval`);
+      if (outcome.state !== 'review') continue;
+      const changed = git(root, ['diff', '--name-only', `${base}...asf/${outcome.id}`]).split('\n').filter(Boolean);
+      const touched = changed.filter((f) => matchesAny(f, policy.protected_paths));
+      if (touched.length) result.breaches.push(`${outcome.id}: protected paths changed: ${touched.join(', ')}`);
+      approve(outcome.id, root);
+    }
+
+    const events = readEvents(paths.runs);
+    const saved = join(paths.runs, 'transcripts');
+    if (opts.transcripts && existsSync(saved)) {
+      cpSync(saved, opts.transcripts, { recursive: true });
+      result.transcripts = opts.transcripts;
+    }
+    const agent = events.filter((e) => e.kind === 'agent');
+    result.tokens = agent.reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
+    result.agentSteps = agent.length;
+    result.denied = agent.flatMap((e) => e.denied ?? []);
+    const final = loadBacklog(paths.backlog).items;
+    for (const id of ready) {
+      const attempts = Math.max(0, ...agent.filter((e) => e.item === id).map((e) => e.attempt ?? 1));
+      const last = events.filter((e) => e.item === id && e.kind === 'item').at(-1);
+      const done = final.find((i) => i.id === id)?.status === 'done';
+      result.items.push({ id, state: done ? 'done' : (last?.outcome ?? 'not run'), attempts, reason: done ? undefined : last?.detail });
+    }
+    for (const id of drafts) {
+      if (events.some((e) => e.item === id)) result.breaches.push(`${id}: an item that was not ready was built`);
+    }
+
+    if (existsSync(join(c.dir, 'hidden'))) cpSync(join(c.dir, 'hidden'), root, { recursive: true });
+    const checks = runChecks(root, c.hidden!.check, policy.sandbox);
+    result.hidden = { ok: checks.every((r) => r.ok), output: formatChecks(checks) };
+    const allDone = result.items.every((i) => i.state === 'done');
+    result.delivered = allDone && result.hidden.ok && !result.breaches.length;
+    result.firstAttempt = result.delivered && result.items.every((i) => i.attempts === 1);
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
+  } finally {
+    result.durationMs = Date.now() - started;
+    if (opts.keep) result.root = root;
+    else rmSync(root, { recursive: true, force: true });
+  }
+  return result;
+}
+
+/** Wilson score interval: honest bounds for a rate measured on few cases. */
+export function wilson(k: number, n: number, z = 1.96): [number, number] {
+  if (!n) return [0, 1];
+  const p = k / n;
+  const d = 1 + (z * z) / n;
+  const centre = p + (z * z) / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return [Math.max(0, (centre - margin) / d), Math.min(1, (centre + margin) / d)];
+}
+
+const quantile = (xs: number[], q: number) => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.ceil(q * s.length) - 1)]!;
+};
+
+export interface SuiteSummary {
+  cases: number;
+  /** Cases delivered in every trial: pass^k, the consistency the owner relies on. */
+  passAll: number;
+  passAllInterval: [number, number];
+  /** Cases delivered in at least one trial: pass@k, what is possible at all. */
+  passAny: number;
+}
+
+export interface EvalSummary {
+  cases: number;
+  trials: number;
+  /** Case runs, cases × trials. */
+  runs: number;
+  delivered: number;
+  rate: number;
+  interval: [number, number];
+  firstAttempt: number;
+  passAll: number;
+  passAny: number;
+  suites: Partial<Record<EvalCase['suite'], SuiteSummary>>;
+  breaches: number;
+  errors: number;
+  tokensMedian: number;
+  tokensP90: number;
+}
+
+function suiteSummary(byCase: CaseResult[][]): SuiteSummary {
+  const passAll = byCase.filter((runs) => runs.every((r) => r.delivered)).length;
+  return {
+    cases: byCase.length,
+    passAll,
+    passAllInterval: wilson(passAll, byCase.length),
+    passAny: byCase.filter((runs) => runs.some((r) => r.delivered)).length,
+  };
+}
+
+export function summarize(results: CaseResult[]): EvalSummary {
+  const delivered = results.filter((r) => r.delivered).length;
+  const tokens = results.map((r) => r.tokens);
+  const byCase = new Map<string, CaseResult[]>();
+  for (const r of results) byCase.set(r.id, [...(byCase.get(r.id) ?? []), r]);
+  const groups = [...byCase.values()];
+  const all = suiteSummary(groups);
+  const suites: EvalSummary['suites'] = {};
+  for (const suite of ['regression', 'capability'] as const) {
+    const g = groups.filter((runs) => runs[0]!.suite === suite);
+    if (g.length) suites[suite] = suiteSummary(g);
+  }
+  return {
+    cases: groups.length,
+    trials: Math.max(0, ...results.map((r) => r.trial)),
+    runs: results.length,
+    delivered,
+    rate: results.length ? delivered / results.length : 0,
+    interval: wilson(delivered, results.length),
+    firstAttempt: results.filter((r) => r.firstAttempt).length,
+    passAll: all.passAll,
+    passAny: all.passAny,
+    suites,
+    breaches: results.reduce((n, r) => n + r.breaches.length, 0),
+    errors: results.filter((r) => r.error).length,
+    tokensMedian: quantile(tokens, 0.5),
+    tokensP90: quantile(tokens, 0.9),
+  };
+}

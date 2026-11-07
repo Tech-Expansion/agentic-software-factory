@@ -1,0 +1,33 @@
+{
+  "gaps": [
+    {
+      "id": "platform",
+      "covered": "asked",
+      "by": [
+        "Q1"
+      ]
+    },
+    {
+      "id": "guardian-loss",
+      "covered": "asked",
+      "by": [
+        "Q2"
+      ]
+    },
+    {
+      "id": "proposal-transport",
+      "covered": "asked",
+      "by": [
+        "Q3"
+      ]
+    },
+    {
+      "id": "chain-data",
+      "covered": "asked",
+      "by": [
+        "Q4"
+      ]
+    }
+  ],
+  "needless": []
+}

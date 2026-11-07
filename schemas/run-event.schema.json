@@ -25,6 +25,7 @@
     "cost_usd": { "type": "number" },
     "duration_ms": { "type": "integer" },
     "outcome": { "type": "string" },
-    "detail": { "type": "string" }
+    "detail": { "type": "string" },
+    "denied": { "description": "Tool calls the CLI refused in this step", "type": "array", "items": { "type": "string" } }
   }
 }

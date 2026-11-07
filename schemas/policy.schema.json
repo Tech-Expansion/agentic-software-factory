@@ -8,6 +8,7 @@
   "properties": {
     "max_attempts": { "type": "integer", "minimum": 1, "description": "Build attempts per item before it is blocked." },
     "max_tokens_per_item": { "type": "integer", "minimum": 1, "description": "Tokens per item, all steps and attempts." },
+    "check_rounds_in_session": { "type": "integer", "minimum": 0, "description": "Times a builder is sent back by the checks inside its session before it may finish; 0 turns it off." },
     "denied_commands": {
       "type": "array",
       "items": { "type": "string" },
@@ -22,6 +23,35 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Glob patterns no agent may change. A diff that touches one blocks the item."
+    },
+    "sensitive_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns. An item that touches one needs the owner's approval of its plan and of its change."
+    },
+    "test_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns of test files. Deleting one or adding a skip to one sends the item back."
+    },
+    "secret_patterns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Extra regular expressions. Added lines that match one are never committed."
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "network_allow": { "type": "array", "items": { "type": "string" } },
+        "deny_read": { "type": "array", "items": { "type": "string" } },
+        "write_allow": { "type": "array", "items": { "type": "string" } },
+        "secret_env": { "type": "array", "items": { "type": "string" } },
+        "local_binding": {
+          "type": "boolean",
+          "description": "Let sandboxed processes listen and connect on loopback. On macOS this reaches every local port of the host, so it is off unless a product needs it (.NET test runs do)."
+        }
+      }
     }
   }
 }

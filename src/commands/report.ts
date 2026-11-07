@@ -1,13 +1,13 @@
 import { loadBacklog } from '../backlog.js';
 import { day, readEvents } from '../runlog.js';
 import { loadState } from '../state.js';
+import { board, fmtTokens as fmt } from '../status.js';
 import { openProduct } from './context.js';
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
-
 /** The daily report: what moved, what waits for the user, what is blocked, and what the tokens went to. */
-export function report(date: string = day(new Date().toISOString())): string {
-  const { paths, project } = openProduct();
+export function report(date: string = day(new Date().toISOString()), root?: string): string {
+  const product = openProduct(root);
+  const { paths, project } = product;
   const { items } = loadBacklog(paths.backlog);
   const state = loadState(paths.state);
   const events = readEvents(paths.runs, date);
@@ -15,17 +15,12 @@ export function report(date: string = day(new Date().toISOString())): string {
   const out: string[] = [`# ${project.name}: report for ${date}`, ''];
 
   const done = events.filter((e) => e.step === 'approve' && e.outcome === 'done').map((e) => e.item);
-  const inState = (s: string) => Object.entries(state.items).filter(([, v]) => v.state === s);
   const section = (heading: string, lines: string[]) => {
     out.push(`## ${heading}`, '', ...(lines.length ? lines : ['- none']), '');
   };
 
   section('Done', done.map((id) => `- ${id} ${title(id)}`));
-  section(
-    'Waiting for you',
-    inState('review').map(([id, v]) => `- ${id} ${title(id)}: \`asf approve ${id}\` or \`asf reject ${id} "<reason>"\`${v.flags?.length ? ` (touches ${v.flags.join(', ')})` : ''}`),
-  );
-  section('Blocked', inState('blocked').map(([id, v]) => `- ${id} ${title(id)}: ${v.reason ?? 'unknown'}`));
+  section('Waiting for you', board(product).decisions.map((d) => `- ${d.item} ${d.title} [${d.kind}]: ${d.what}; ${d.how}`));
   const ready = items.filter((i) => i.status === 'ready' && !state.items[i.id]).map((i) => `- ${i.id} ${i.title}`);
   section('Next', ready.slice(0, 5));
   const drafts = items.filter((i) => i.status === 'draft').length;

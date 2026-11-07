@@ -1,7 +1,14 @@
-# Build one backlog item. A failing step sends the item back to `build` with the failure as feedback,
-# up to the policy's max_attempts. Cheap checks run before the model review.
+# Build one backlog item. Acceptance tests are written first, from the criteria, by an agent that does not build;
+# they are committed and locked. A failing step after that sends the item back to `build` with the failure as
+# feedback, up to the policy's max_attempts. Cheap checks run before the model review.
 name: feature
 steps:
+  - id: tests
+    kind: agent
+    role: tester
+    skills: [write-acceptance-tests]
+    access: write
+    scope: tests
   - id: build
     kind: agent
     role: builder

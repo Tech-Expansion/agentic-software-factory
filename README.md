@@ -3,10 +3,16 @@
 A local-first agentic software factory: a small team of AI agents that turns a rough idea into tested, documented
 software, using your own Claude Code or Codex subscription.
 
-You plan with the **planner** in an interactive session. After that, `asf run` builds the backlog unattended: the
-**builder** implements one item in its own git worktree, your product's own checks run, and a read-only **verifier**
-judges the result against the item's acceptance criteria. Nothing reaches your main branch until you run
-`asf approve`.
+You plan with the **planner** in an interactive session, or write a rough requirement as a `new` item: the
+**analyst** reads it and asks you only what it cannot settle itself, with options and a recommendation, and the item
+is built only once you have answered. After that, `asf run` builds the backlog unattended: the
+**tester** turns an item's acceptance criteria into tests, which are then locked; the **builder** implements the item
+in its own git worktree until they pass; your product's own checks run; and a read-only **verifier** judges the result
+against the item's acceptance criteria. Nothing reaches your main branch until you approve it:
+item by item with `asf approve`, or, with an integration branch, in batches with `asf release`, while changes to
+sensitive paths and high-risk items still wait for you one by one.
+When an item needed a second attempt or you rejected it, a read-only **retro** proposes what would stop the
+mistake next time, as a check rather than a longer prompt; you decide each lesson.
 
 > Status: 0.1, experimental. The first vertical slice works end to end with Claude Code 2.1 and codex-cli 0.147.
 > Not yet published to npm.
@@ -27,7 +33,8 @@ judges the result against the item's acceptance criteria. Nothing reaches your m
 
 ```mermaid
 flowchart LR
-  R[ready item] --> B[builder<br/>write access, worktree]
+  R[ready item] --> T[tester<br/>test files only, committed and locked]
+  T --> B[builder<br/>write access, worktree]
   B --> C[product checks<br/>no model]
   C -->|fail| B
   C -->|pass| V[verifier<br/>read-only, verdict JSON]
@@ -42,6 +49,9 @@ flowchart LR
 
 - Node.js 22 or later, and git.
 - Claude Code and/or Codex installed and signed in. A different vendor as verifier is recommended.
+- Anthropic's sandbox runtime, `npm install -g @anthropic-ai/sandbox-runtime`, and on Linux `bubblewrap` and
+  `socat`. Agent commands and checks run sandboxed and refuse to run without it; see
+  [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 
 ## Install from source
 
@@ -64,7 +74,7 @@ asf init my-idea && cd my-idea
    `ready` only when you agree.
 3. `asf validate`: settings, policy and the links between backlog, specs and criteria.
 4. `asf run` builds the next ready item, `asf run --all` keeps going until one blocks or none is left.
-5. `asf report`, `asf show <id>`, then `asf approve <id>` or `asf reject <id> "<reason>"`.
+5. `asf status` shows every item and every decision waiting for you; `asf show <id>`, then `asf approve <id>` or `asf reject <id> "<reason>"`.
 
 ## Commands
 
@@ -73,19 +83,28 @@ asf init my-idea && cd my-idea
 | `asf init [dir] [--name n]` | Create a product skeleton, `git init` it and register it in `~/.agentic-software-factory` |
 | `asf discover` | Interactive planning session with the planner, in your CLI |
 | `asf validate` | Check `.factory/`, the backlog and its spec and criterion links |
+| `asf clarify [--item id] [--again]` | The analyst reads `new` items and asks only what it must know; an item with nothing blocking becomes ready |
+| `asf questions` | Open questions, with options and the team's recommendation |
+| `asf answer <id> <Q> <answer>` / `asf answer <id> --accept` | Answer a question, or take every recommendation left; the decisions go into the item, which becomes ready |
+| `asf sync` | With a tracker in `project.yaml`: take in the owner's new tickets, post questions and results, apply the owner's comments (`Q1: ...`, `/accept`, `/approve`, `/reject <reason>`, `/retry`). With `tracker.digest` set to a ticket, it posts a digest of each day there and the board whenever the owner comments `/status`; see [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md) |
 | `asf run [--item id] [--all]` | Build ready items unattended |
+| `asf serve [--workers n] [--interval s] [--once]` | Work unattended on an always-on host: sync, clarify, build up to n independent items at a time, report back. Idle rounds call no model; a usage limit pauses until the quota resets; a stop or crash resumes where it was. One process per product (`.factory/lock`) |
+| `asf status [--json]` | The board: each item's column, what `asf serve` is doing (from its heartbeat, `.factory/serve.json`), every decision waiting for you oldest first with how to give it, tokens today and this week |
 | `asf show <id>` | Branch, worktree, why it stopped, what needs your attention |
-| `asf approve <id>` | Mark the item done and merge its branch (the only way code reaches the base branch) |
+| `asf approve <id>` | Approve a high-risk item's plan, or mark an item done and merge its branch: into the integration branch when `project.yaml` has one, otherwise into the base branch |
+| `asf release [--dry]` | Merge the integration branch into the base branch, as one batch ([ADR 0006](docs/adr/0006-integration-branch-and-batch-releases.md)) |
 | `asf reject <id> <reason>` | Send it back; the reason becomes the builder's feedback |
 | `asf retry <id>` | Let a blocked item run again |
+| `asf lessons` / `asf lesson <id> accept\|reject` | Lessons the retro proposed after troubled items. Accepting a check makes a ready backlog item, a doc goes into the project memory, a factory lesson becomes a proposal for this repository ([ADR 0007](docs/adr/0007-lessons-proposed-by-retros-decided-by-the-owner.md)) |
 | `asf report [--date d]` | Daily report: done, waiting for you, blocked, next, tokens per step |
 | `asf projects` | Products registered on this machine |
+| `asf eval [--case id] [--suite s] [--trials k] [--reference] [--without step]` | Run the eval cases: build cases against hidden tests, clarify cases against planted gaps; `--without` or `--workflow` measures what a step is worth (factory development) |
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
-| `agents/` | Role briefs: planner, builder, verifier |
+| `agents/` | Role briefs: planner, analyst, tech lead, tester, builder, verifier, retro |
 | `skills/` | Skills the steps load, one folder each |
 | `workflows/` | Steps per kind of work (`feature.yaml`) |
 | `policies/default.yaml` | What agents may not do, limits, paths that need your attention |
@@ -99,10 +118,12 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code, 
 
 ## Known limits
 
-- No container isolation yet: a builder can reach whatever its CLI's sandbox allows. Do not run ideas you do not
-  trust. See [ADR 0003](docs/adr/0003-runner.md).
+- Agent commands and checks run in a sandbox with no credentials and network only to package registries, not in a
+  container. Codex has no network but can read what its user can; the secret scan before each commit is the
+  backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
-- Only the feature workflow exists. Learning from the run log, deployment and external trackers are not built yet.
+- Only the feature workflow exists, and deployment is not built. Jira is the only external tracker.
+- On Claude Code the builder runs the checks itself before it may finish (a Stop hook, [ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)); Codex has no such hook and relies on the runner's attempts.
 - A builder call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),
   most of it served from cache.
 
@@ -113,6 +134,19 @@ npm test
 ```
 
 Tests use a fake runtime and spend no tokens.
+
+How well the factory works is measured, not guessed: see the [roadmap](docs/roadmap.md). Each case in `evals/cases/`
+is a small product with a backlog and acceptance tests the agents never see. Cases are in one of two suites:
+`regression` cases should stay near 100% and catch a version that got worse, `capability` cases start low and show
+whether a change lets the factory do more. `asf eval` builds every case with your CLI and reports the delivery rate
+with its 95% interval, hard-gate breaches, attempts and tokens; with `--trials k` each case runs k times and the
+report adds pass^k (delivered in every trial) and pass@k (in at least one). Agent transcripts are kept next to the
+results file for error analysis. `asf eval --reference` builds the cases with their own solutions instead, to check
+the cases themselves; CI runs it.
+
+```bash
+node dist/cli.js eval --trials 3
+```
 
 ## License
 

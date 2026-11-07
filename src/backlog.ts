@@ -7,11 +7,16 @@ import type { ItemState, State } from './state.js';
 export interface BacklogItem {
   id: string;
   title: string;
-  status: 'draft' | 'ready' | 'done';
+  /** new: waiting for the analyst or the owner's answers. draft: parked by the owner. Only ready items are built. */
+  status: 'new' | 'draft' | 'ready' | 'done';
   priority?: number;
   spec?: string;
   criteria?: string[];
   depends_on?: string[];
+  /** high: plan approved before the build, change approved on its own. */
+  risk?: 'high';
+  /** The ticket this item comes from. */
+  tracker?: string;
   file: string;
   body: string;
 }
@@ -50,11 +55,11 @@ export function loadBacklog(dir: string): { items: BacklogItem[]; errors: string
   return { items, errors };
 }
 
-const BUSY: ItemState['state'][] = ['in-progress', 'review', 'blocked'];
+const BUSY: ItemState['state'][] = ['in-progress', 'review', 'blocked', 'plan-review', 'merged'];
 
-/** The next item to build: ready, not busy, every dependency done; lowest priority number first. */
+/** The next item to build: ready, not busy, every dependency done or merged; lowest priority number first. */
 export function nextReady(items: BacklogItem[], state: State): BacklogItem | undefined {
-  const done = new Set(items.filter((i) => i.status === 'done').map((i) => i.id));
+  const done = new Set(items.filter((i) => i.status === 'done' || state.items[i.id]?.state === 'merged').map((i) => i.id));
   return items
     .filter((i) => i.status === 'ready')
     .filter((i) => !BUSY.includes(state.items[i.id]?.state as ItemState['state']))
@@ -70,6 +75,9 @@ export function setStatus(file: string, status: BacklogItem['status']): void {
   const front = m[0].replace(/^status:.*$/m, `status: ${status}`);
   writeFileSync(file, front + text.slice(m[0].length));
 }
+
+/** A commit subject for an item's work: led by its ticket when it has one, as "[AI-7] feat: ...". */
+export const subject = (item: Pick<BacklogItem, 'tracker'>, text: string) => (item.tracker ? `[${item.tracker}] ${text}` : text);
 
 export function relativeFile(root: string, item: BacklogItem): string {
   return relative(root, item.file);

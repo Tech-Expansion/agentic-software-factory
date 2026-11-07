@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export interface Tokens {
@@ -22,6 +22,8 @@ export interface RunEvent {
   duration_ms?: number;
   outcome: string;
   detail?: string;
+  /** Tool calls the CLI refused in this step. */
+  denied?: string[];
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -36,6 +38,13 @@ export const day = (iso: string) => {
 export function appendEvent(runsDir: string, event: RunEvent): void {
   mkdirSync(runsDir, { recursive: true });
   appendFileSync(join(runsDir, `${day(event.at)}.jsonl`), JSON.stringify(event) + '\n');
+}
+
+/** Keeps what the agent CLI printed for one step: `<runs>/transcripts/<item>/<name>.jsonl`. */
+export function saveTranscript(runsDir: string, item: string, name: string, text: string): void {
+  const dir = join(runsDir, 'transcripts', item);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${name}.jsonl`), text);
 }
 
 export function readEvents(runsDir: string, date?: string): RunEvent[] {

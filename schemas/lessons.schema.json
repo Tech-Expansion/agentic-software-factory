@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/lessons.schema.json",
+  "title": "What the retrospective of one item proposes",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lessons"],
+  "properties": {
+    "lessons": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "problem", "kind", "scope", "proposal", "recurs"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "description": "The rule, as an imperative." },
+          "problem": { "type": "string", "minLength": 1, "description": "What went wrong, with the evidence." },
+          "kind": { "enum": ["check", "doc", "skill", "workflow"] },
+          "scope": { "enum": ["product", "factory"] },
+          "proposal": { "type": "string", "minLength": 1, "description": "Exactly what to add or change." },
+          "recurs": { "type": "string", "description": "The id of an existing lesson this mistake repeats, or an empty string." }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+id: clarify-order-export
+kind: clarify
+stack: none
+description: An order export for accounting, whose requirement is clear on format and access but silent on which orders, time zones and size.
+suite: capability
+tags: [clarify, existing-product]
+gaps:
+  - id: which-orders
+    gap: Which orders an export holds (a date range or other filter, or all of them) is not said.
+  - id: status
+    gap: Whether cancelled and refunded orders are included, and how, is not said; it matters to accounting.
+  - id: timezone
+    gap: The shop is in Vietnam but the server stores UTC; which time zone the exported dates are in, and which day an order near midnight belongs to, is open.
+  - id: size
+    gap: Exports can be large (the shop has about 400,000 orders); whether the export is an immediate download or prepared in the background is open.
+settled:
+  - The file is CSV, UTF-8 with a byte order mark, comma separated.
+  - Only users with the admin role can export.
+  - The columns are order number, date, customer name, total in VND, status.
+  - Totals are whole VND with no decimals.

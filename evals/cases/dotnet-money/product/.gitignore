@@ -1,0 +1,5 @@
+bin/
+obj/
+.factory/runs/
+.factory/worktrees/
+.factory/state.json

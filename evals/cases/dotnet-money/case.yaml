@@ -1,0 +1,8 @@
+id: dotnet-money
+kind: build
+stack: dotnet
+description: A money value type in C# with exact rounding, allocation without lost cents and culture-proof output.
+suite: regression
+tags: [feature, greenfield]
+hidden:
+  check: ["dotnet test hidden-tests/Ledger.Hidden"]

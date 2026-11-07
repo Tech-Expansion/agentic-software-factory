@@ -9,6 +9,8 @@ For any agent or person changing this repository. What the product is and why: [
 - Build: `npm run build` (TypeScript to `dist/`)
 - Test: `npm test` (builds, then `node --test`; uses a fake runtime, spends no tokens)
 - Try it: `node dist/cli.js <command>`, or `npm link` for `asf`
+- Check the eval cases: `node dist/cli.js eval --reference` (no tokens)
+- Measure the factory: `node dist/cli.js eval` (spends tokens on your CLI)
 
 ## Rules
 
@@ -23,3 +25,10 @@ For any agent or person changing this repository. What the product is and why: [
 - Dependencies stay at `yaml` and `ajv` unless an ADR says otherwise.
 - Code, comments, commits and docs are in English. Commits follow Conventional Commits.
 - A decision that is hard to undo gets an ADR in `docs/adr/`.
+- A change to `agents/`, `skills/`, `workflows/` or the engine that is meant to make the factory better says so with
+  `asf eval --trials 3` numbers from before and after. New eval cases come with a `reference/` solution that passes
+  `asf eval --reference`, and hidden tests that fail on the untouched fixture. A capability case that the factory
+  passes in every trial for two versions in a row moves to `regression`.
+- Lessons from products arrive as proposals in `~/.agentic-software-factory/proposals/` ([ADR 0007](docs/adr/0007-lessons-proposed-by-retros-decided-by-the-owner.md)).
+  One is adopted only with eval numbers; `asf eval --without <step>` shows what a step is worth before one is
+  added or removed.
