@@ -11,7 +11,7 @@ import { clearHeartbeat, writeHeartbeat } from '../status.js';
 import type { Tracker } from '../tracker/types.js';
 import { clarify } from './clarify.js';
 import { openProduct, runtimes, UsageError } from './context.js';
-import { settle } from './run.js';
+import { learn, settle } from './run.js';
 import { sync } from './sync.js';
 
 export interface ServeOptions {
@@ -76,6 +76,7 @@ export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; 
       const p = Promise.resolve()
         .then(() => runItem(ctx, item))
         .then((o) => settle(product, o, log))
+        .then(async (o) => (await learn(ctx, item, o, log), o))
         .then((o) => {
           outcomes.push(o);
           if (o.state === 'paused') pausedUntil = Math.max(pausedUntil, o.resumeAt ?? now() + 15 * 60_000);

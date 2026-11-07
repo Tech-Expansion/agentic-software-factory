@@ -19,6 +19,8 @@ export interface EngineContext {
   policy: Policy;
   runtime: (name: RuntimeName) => Runtime;
   log?: (msg: string) => void;
+  /** The workflow items run through; the feature workflow when unset. */
+  workflow?: Workflow;
 }
 
 export interface ItemOutcome {
@@ -83,7 +85,7 @@ export function verdictFails(v: Verdict): string | undefined {
   return lines.join('\n');
 }
 
-export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: Workflow = loadWorkflow('feature')): Promise<ItemOutcome> {
+export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: Workflow = ctx.workflow ?? loadWorkflow('feature')): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
   // Items branch from the integration branch when there is one, so each builds on what is already merged.
   const base = integrationBase(paths.root, project);
@@ -328,6 +330,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     feedback = failed;
     st.feedback = failed;
     save();
+    event({ attempt, step: 'attempt', kind: 'item', outcome: 'failed', detail: failed.slice(0, 4000) });
   }
   return finish('blocked', `still failing after ${policy.max_attempts} attempts`);
 }

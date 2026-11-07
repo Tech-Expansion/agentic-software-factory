@@ -6,6 +6,7 @@ import { notify } from '../notify.js';
 import { openProduct, runtimes, UsageError, type Product } from './context.js';
 import { acquire } from '../lock.js';
 import { approve } from './review.js';
+import { retro } from '../retro.js';
 
 export interface RunOptions {
   item?: string;
@@ -52,6 +53,7 @@ async function buildAll(product: Product, ctx: EngineContext, opts: RunOptions):
     }
     if (!item) break;
     const outcome = settle(product, await runItem(ctx, item), opts.log);
+    await learn(ctx, item, outcome, opts.log);
     outcomes.push(outcome);
     if (project.opt_ins?.notifications === 'desktop') {
       notify(`asf: ${item.id} ${outcome.state}`, outcome.reason ?? item.title);
@@ -59,6 +61,15 @@ async function buildAll(product: Product, ctx: EngineContext, opts: RunOptions):
     if (opts.item || !opts.all || outcome.state === 'blocked' || outcome.state === 'paused') break;
   }
   return outcomes;
+}
+
+/** After an item that needed more than one attempt or was rejected: the retro proposes lessons. It never changes the outcome. */
+export async function learn(ctx: EngineContext, item: BacklogItem, outcome: ItemOutcome, log?: (msg: string) => void): Promise<void> {
+  try {
+    for (const l of await retro(ctx, item, outcome)) log?.(`${l.id} ${l.status === 'proposed' ? 'proposed' : 'seen again'}: ${l.title}`);
+  } catch (err) {
+    log?.(`retro: ${(err as Error).message}`);
+  }
 }
 
 /** With an integration branch, an item nothing flagged merges on its own; the owner releases batches later. */

@@ -9,6 +9,7 @@ import { factoryHome } from './paths.js';
 import { version } from './version.js';
 import { openProduct, UsageError } from './commands/context.js';
 import { board, formatBoard } from './status.js';
+import { decideLesson, loadLessons } from './retro.js';
 import { discover } from './commands/discover.js';
 import { answer, clarify, questions, type ClarifyOutcome } from './commands/clarify.js';
 import { evaluate, formatEval } from './commands/eval.js';
@@ -45,13 +46,18 @@ Usage:
   asf release [--dry]               merge the integration branch into the base branch
   asf reject <id> <reason>          send an item in review back with feedback
   asf retry <id>                    let a blocked item run again
+  asf lessons                       lessons the retros proposed, and what became of them
+  asf lesson <id> accept|reject     accept a lesson (a check becomes a backlog item, a doc goes
+                                    into the project memory) or reject it
   asf report [--date YYYY-MM-DD]    daily report
   asf projects                      products registered on this machine
   asf eval [--case <id>] [--suite regression|capability] [--trials <k>]
            [--cases <dir>] [--out <file>] [--keep] [--reference]
+           [--workflow <name|file>] [--without <step,...>]
                                     build the eval cases and score them against hidden tests,
                                     k times each for pass^k; --reference checks the cases with
-                                    their own solutions
+                                    their own solutions; --without leaves workflow steps out,
+                                    to measure what each is worth
 `;
 
 function clarified(o: ClarifyOutcome): string {
@@ -81,6 +87,8 @@ async function main(argv: string[]): Promise<number> {
       workers: { type: 'string' },
       interval: { type: 'string' },
       once: { type: 'boolean' },
+      workflow: { type: 'string' },
+      without: { type: 'string' },
       accept: { type: 'boolean' },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
@@ -187,6 +195,19 @@ async function main(argv: string[]): Promise<number> {
       retry(need(0, 'item id'));
       console.log('it runs again on the next `asf run`');
       return 0;
+    case 'lessons': {
+      const ls = loadLessons(openProduct().paths.factory);
+      if (!ls.length) console.log('no lessons yet');
+      for (const l of ls) console.log(`${l.id} [${l.status}] ${l.scope} ${l.kind}: ${l.title}${l.items.length > 1 ? ` (seen on ${l.items.join(', ')})` : ''}\n  ${l.proposal}${l.applied ? `\n  → ${l.applied}` : ''}`);
+      return 0;
+    }
+    case 'lesson': {
+      const d = need(1, 'accept or reject');
+      if (d !== 'accept' && d !== 'reject') throw new UsageError('asf lesson <id> accept|reject');
+      const l = decideLesson(openProduct(), need(0, 'lesson id'), d);
+      console.log(`${l.id} ${l.status}${l.applied ? `: ${l.applied}` : ''}`);
+      return 0;
+    }
     case 'report':
       console.log(report(values.date));
       return 0;
@@ -205,6 +226,8 @@ async function main(argv: string[]): Promise<number> {
         out: values.out,
         keep: values.keep,
         reference: values.reference,
+        workflow: values.workflow,
+        without: values.without?.split(',').map((s) => s.trim()).filter(Boolean),
         log: (m) => console.log(m),
       });
       console.log(`\n${formatEval(r)}`);

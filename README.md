@@ -11,6 +11,8 @@ in its own git worktree until they pass; your product's own checks run; and a re
 against the item's acceptance criteria. Nothing reaches your main branch until you approve it:
 item by item with `asf approve`, or, with an integration branch, in batches with `asf release`, while changes to
 sensitive paths and high-risk items still wait for you one by one.
+When an item needed a second attempt or you rejected it, a read-only **retro** proposes what would stop the
+mistake next time, as a check rather than a longer prompt; you decide each lesson.
 
 > Status: 0.1, experimental. The first vertical slice works end to end with Claude Code 2.1 and codex-cli 0.147.
 > Not yet published to npm.
@@ -93,15 +95,16 @@ asf init my-idea && cd my-idea
 | `asf release [--dry]` | Merge the integration branch into the base branch, as one batch ([ADR 0006](docs/adr/0006-integration-branch-and-batch-releases.md)) |
 | `asf reject <id> <reason>` | Send it back; the reason becomes the builder's feedback |
 | `asf retry <id>` | Let a blocked item run again |
+| `asf lessons` / `asf lesson <id> accept\|reject` | Lessons the retro proposed after troubled items. Accepting a check makes a ready backlog item, a doc goes into the project memory, a factory lesson becomes a proposal for this repository ([ADR 0007](docs/adr/0007-lessons-proposed-by-retros-decided-by-the-owner.md)) |
 | `asf report [--date d]` | Daily report: done, waiting for you, blocked, next, tokens per step |
 | `asf projects` | Products registered on this machine |
-| `asf eval [--case id] [--suite s] [--trials k] [--reference]` | Run the eval cases: build cases against hidden tests, clarify cases against planted gaps (factory development) |
+| `asf eval [--case id] [--suite s] [--trials k] [--reference] [--without step]` | Run the eval cases: build cases against hidden tests, clarify cases against planted gaps; `--without` or `--workflow` measures what a step is worth (factory development) |
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
-| `agents/` | Role briefs: planner, analyst, tester, builder, verifier |
+| `agents/` | Role briefs: planner, analyst, tech lead, tester, builder, verifier, retro |
 | `skills/` | Skills the steps load, one folder each |
 | `workflows/` | Steps per kind of work (`feature.yaml`) |
 | `policies/default.yaml` | What agents may not do, limits, paths that need your attention |

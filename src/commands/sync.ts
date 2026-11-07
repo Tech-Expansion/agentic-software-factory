@@ -11,6 +11,7 @@ import { jira } from '../tracker/jira.js';
 import type { Tracker } from '../tracker/types.js';
 import { answer } from './clarify.js';
 import { openProduct, UsageError, type Product } from './context.js';
+import { decideLesson } from '../retro.js';
 import { report } from './report.js';
 import { approve, reject, retry } from './review.js';
 
@@ -276,7 +277,19 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
     const today = day(now.toISOString());
     if (links.digest?.key !== cfg.digest) links.digest = { key: cfg.digest, seen: (await tracker.comments(cfg.digest)).map((c) => c.id), day: today };
     const d = links.digest;
-    const asks = (await fresh(d)).filter((c) => /^\s*\/status\b/im.test(c.body));
+    const comments = await fresh(d);
+    for (const c of comments) {
+      for (const m of c.body.matchAll(/^\s*\/lesson\s+(L-\d+)\s+(accept|reject)\b/gim)) {
+        try {
+          const l = decideLesson(product, m[1]!.toUpperCase(), m[2]!.toLowerCase() as 'accept' | 'reject');
+          await tracker.comment(d.key, `${MARK} ${l.id} ${l.status}${l.applied ? `: ${l.applied}` : ''}`);
+          say(`${d.key}: ${l.id} ${l.status}`);
+        } catch (err) {
+          await tracker.comment(d.key, `${MARK} Could not decide ${m[1]}: ${(err as Error).message}`);
+        }
+      }
+    }
+    const asks = comments.filter((c) => /^\s*\/status\b/im.test(c.body));
     if (asks.length) {
       await tracker.comment(d.key, `${MARK} Status at ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC\n\n${formatBoard(board(product, now), now)}`);
       say(`${d.key}: status`);

@@ -93,15 +93,17 @@ test('failed checks go back to the builder with the output, without a model revi
   const rt = fake((c, n) => (c.access === 'write' ? (n === 1 ? { write: { 'other.txt': 'x' } } : { write: { 'hello.txt': 'hi' } }) : { structured: verdict(true) }));
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
-  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'write', 'read']);
+  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'write', 'read', 'read']);
   assert.match(rt.calls[1]!.prompt, /The checks failed/);
+  assert.match(rt.calls[3]!.systemPrompt, /retrospective/, 'a second attempt gets a retro');
 });
 
 test('an item that keeps failing review is blocked after max_attempts', async () => {
   const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(false) }));
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'blocked');
-  assert.equal(rt.calls.length, 4);
+  assert.equal(rt.calls.length, 5, 'tests, two builds and reviews, the retro');
+  assert.match(rt.calls[4]!.prompt, /What went wrong, in order[\s\S]*Attempt 1: Verifier/);
   assert.match(rt.calls[2]!.prompt, /AC-001 not_met: no hello.txt/);
 });
 

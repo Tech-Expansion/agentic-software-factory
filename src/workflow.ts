@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { factoryRoot } from './paths.js';
 
@@ -29,9 +29,16 @@ export interface Workflow {
   steps: Step[];
 }
 
-/** Loads `workflows/<name>.yaml`. A failing step sends the item back to the first step with feedback. */
-export function loadWorkflow(name: string): Workflow {
-  const wf = parse(readFileSync(join(factoryRoot, 'workflows', `${name}.yaml`), 'utf8')) as Workflow;
+/**
+ * Loads `workflows/<name>.yaml`, or a workflow file by path. `without` drops steps by id, to measure with `asf eval`
+ * what a step is worth. A failing step sends the item back to the first step with feedback.
+ */
+export function loadWorkflow(name: string, without: string[] = []): Workflow {
+  const file = name.endsWith('.yaml') ? resolve(name) : join(factoryRoot, 'workflows', `${name}.yaml`);
+  const wf = parse(readFileSync(file, 'utf8')) as Workflow;
+  const missing = without.filter((id) => !wf?.steps?.some((s) => s.id === id));
+  if (missing.length) throw new Error(`workflow ${name} has no step ${missing.join(', ')}`);
+  if (without.length) wf.steps = wf.steps.filter((s) => !without.includes(s.id));
   if (!wf?.steps?.length || wf.steps[0]?.kind !== 'agent' || (wf.steps[0] as AgentStep).access !== 'write') {
     throw new Error(`workflow ${name}: the first step must be an agent step with write access`);
   }

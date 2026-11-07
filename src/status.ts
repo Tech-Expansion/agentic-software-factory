@@ -5,6 +5,7 @@ import { loadClarification, openQuestions } from './clarify.js';
 import type { Product } from './commands/context.js';
 import { alive } from './lock.js';
 import { day, readEvents } from './runlog.js';
+import { loadLessons } from './retro.js';
 import { loadState, type ItemState } from './state.js';
 
 /** What `asf serve` writes each round, so anyone can see what the team is doing without asking it. */
@@ -33,7 +34,7 @@ export function readHeartbeat(factory: string): Heartbeat | undefined {
 export interface Decision {
   item: string;
   title: string;
-  kind: 'answer' | 'plan' | 'review' | 'blocked' | 'release';
+  kind: 'answer' | 'plan' | 'review' | 'blocked' | 'release' | 'lesson';
   since: string;
   what: string;
   /** How to give it: a command here, or a reply on the ticket. */
@@ -99,6 +100,18 @@ export function board(product: Product, now: Date = new Date()): Board {
   if (merged.length) {
     const since = merged.map(([, v]) => v.updated_at).sort()[0]!;
     decisions.push({ item: merged.map(([id]) => id).sort().join(', '), title: `${merged.length} item(s) in ${project.integration_branch}`, kind: 'release', since, what: `release into ${project.base_branch ?? 'main'}`, how: 'asf release' });
+  }
+  const digest = project.tracker?.digest;
+  for (const l of loadLessons(paths.factory).filter((x) => x.status === 'proposed')) {
+    const seen = l.items.length > 1 ? `, seen on ${l.items.join(', ')}` : '';
+    decisions.push({
+      item: l.id,
+      title: l.title,
+      kind: 'lesson',
+      since: l.at,
+      what: `a ${l.scope} ${l.kind}${seen}${l.note ? `; ${l.note}` : ''}: ${l.proposal}`,
+      how: digest ? `reply on ${digest}: "/lesson ${l.id} accept" or "/lesson ${l.id} reject"` : `asf lesson ${l.id} accept, or reject`,
+    });
   }
   decisions.sort((a, b) => a.since.localeCompare(b.since));
 

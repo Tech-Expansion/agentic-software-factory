@@ -6,6 +6,7 @@ import { ConfigError } from '../config.js';
 import { loadCases, runCase, summarize, type CaseResult, type EvalSummary } from '../eval.js';
 import { git } from '../git.js';
 import { factoryHome, factoryRoot } from '../paths.js';
+import { loadWorkflow } from '../workflow.js';
 import { version } from '../version.js';
 
 export interface EvalOptions {
@@ -18,12 +19,17 @@ export interface EvalOptions {
   keep?: boolean;
   /** Build each case with its reference solution instead of the agents, to check the cases themselves. */
   reference?: boolean;
+  /** A workflow other than feature, by name or file, and steps to leave out of it: an ablation. */
+  workflow?: string;
+  without?: string[];
   log?: (msg: string) => void;
   /** For tests. */
   context?: Partial<EngineContext>;
 }
 
 export interface EvalRun {
+  /** Set when the run used another workflow or left steps out, so it is never compared with a baseline as is. */
+  workflow?: string;
   version: string;
   reference: boolean;
   commit?: string;
@@ -41,6 +47,9 @@ export async function evaluate(opts: EvalOptions = {}): Promise<EvalRun> {
   const log = opts.log ?? (() => {});
   const trials = opts.trials ?? 1;
   if (!Number.isInteger(trials) || trials < 1) throw new ConfigError(`--trials must be a whole number of 1 or more, not ${opts.trials}`);
+  const ablation = opts.workflow || opts.without?.length ? `${opts.workflow ?? 'feature'}${opts.without?.length ? ` without ${opts.without.join(', ')}` : ''}` : undefined;
+  const workflow = ablation ? loadWorkflow(opts.workflow ?? 'feature', opts.without) : undefined;
+  const context = workflow ? { ...opts.context, workflow } : opts.context;
   const cases = loadCases(opts.cases ?? join(factoryRoot, 'evals', 'cases'), opts.only).filter((c) => !opts.suite || c.suite === opts.suite);
   if (!cases.length) throw new ConfigError(`no eval case in suite ${opts.suite}`);
   const home = factoryHome();
@@ -56,7 +65,7 @@ export async function evaluate(opts: EvalOptions = {}): Promise<EvalRun> {
       for (let trial = 1; trial <= trials; trial++) {
         log(`== ${c.id} (${c.stack}, ${c.suite})${trials > 1 ? ` trial ${trial}/${trials}` : ''}`);
         const r = await runCase(c, {
-          context: opts.context,
+          context,
           keep: opts.keep,
           reference: opts.reference,
           trial,
@@ -72,7 +81,7 @@ export async function evaluate(opts: EvalOptions = {}): Promise<EvalRun> {
     else process.env.ASF_HOME = saved;
   }
   const commit = git(factoryRoot, ['rev-parse', '--short', 'HEAD'], true).trim() || undefined;
-  const out: EvalRun = { version, reference: !!opts.reference, commit, at, summary: summarize(results), cases: results, file };
+  const out: EvalRun = { version, workflow: ablation, reference: !!opts.reference, commit, at, summary: summarize(results), cases: results, file };
   mkdirSync(dirname(file), { recursive: true });
   const { file: _f, ...data } = out;
   writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
@@ -83,7 +92,7 @@ export function formatEval(r: EvalRun): string {
   const s = r.summary;
   const label = (c: CaseResult) => (s.trials > 1 ? `${c.id} #${c.trial}` : c.id);
   const width = Math.max(...r.cases.map((c) => label(c).length), 4);
-  const lines = [`asf ${r.version}${r.commit ? ` (${r.commit})` : ''}: ${s.cases} case(s)${r.reference ? ', reference solutions' : ''}`, ''];
+  const lines = [`asf ${r.version}${r.commit ? ` (${r.commit})` : ''}: ${s.cases} case(s)${r.reference ? ', reference solutions' : ''}${r.workflow ? `, workflow ${r.workflow}` : ''}`, ''];
   for (const c of r.cases) {
     const why =
       c.error ??
