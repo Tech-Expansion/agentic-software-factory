@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
@@ -6,7 +6,8 @@ import { runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, ty
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
-import type { ProductPaths } from './paths.js';
+import type { StopHookConfig, StopHookCount } from './hooks/stop-checks.js';
+import { factoryRoot, type ProductPaths } from './paths.js';
 import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
 import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
 import type { AgentResult, Runtime } from './runtimes/types.js';
@@ -85,6 +86,22 @@ export function verdictFails(v: Verdict): string | undefined {
   return lines.join('\n');
 }
 
+/** The Stop hook for one build call: its settings, and how many rounds it ran once the call is over. */
+function stopHook(paths: ProductPaths, item: string, name: string, cfg: Omit<StopHookConfig, 'counter'>) {
+  const dir = join(paths.runs, 'hooks', item);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${name}.json`);
+  const counter = join(dir, `${name}.count.json`);
+  rmSync(counter, { force: true });
+  writeFileSync(file, JSON.stringify({ ...cfg, counter } satisfies StopHookConfig) + '\n');
+  const script = join(factoryRoot, 'dist', 'hooks', 'stop-checks.js');
+  const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+  return {
+    hooks: { Stop: [{ hooks: [{ type: 'command', command: `${quote(process.execPath)} ${quote(script)} ${quote(file)}`, timeout: 1800 }] }] },
+    count: (): StopHookCount | undefined => (existsSync(counter) ? (JSON.parse(readFileSync(counter, 'utf8')) as StopHookCount) : undefined),
+  };
+}
+
 export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: Workflow = ctx.workflow ?? loadWorkflow('feature')): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
   // Items branch from the integration branch when there is one, so each builds on what is already merged.
@@ -154,6 +171,11 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   const callAgent = async (step: AgentStep, attempt: number, extra: Pick<ItemContext, 'feedback' | 'checks' | 'diff'>, schema?: string) => {
     const runtimeName = runtimeFor(project, step.role);
     const locked = step.scope === 'tests' ? [] : (st.tests?.files ?? []);
+    // A builder on Claude Code runs the checks itself before it may finish, so a failure is fixed in the same session.
+    const stop =
+      step.access === 'write' && !step.scope && runtimeName === 'claude-code' && policy.check_rounds_in_session > 0 && project.commands.check.length
+        ? stopHook(paths, item.id, `a${attempt}-${step.id}`, { cwd: worktree, commands: project.commands.check, sandbox: policy.sandbox, max: policy.check_rounds_in_session })
+        : undefined;
     const result = await ctx.runtime(runtimeName).call({
       cwd: worktree,
       systemPrompt: systemPrompt(step.role, step.skills),
@@ -175,6 +197,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
       protectedPaths: [...policy.protected_paths, ...locked],
       writeOnly: step.scope === 'tests' ? policy.test_paths : undefined,
       sandbox: policy.sandbox,
+      hooks: stop?.hooks,
     });
     if (result.transcript) saveTranscript(paths.runs, item.id, `a${attempt}-${step.id}`, result.transcript);
     st.tokens += result.tokens.total;
@@ -193,6 +216,10 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
       denied: result.denied,
     });
     log(`${item.id} attempt ${attempt} ${step.id} (${runtimeName}): ${result.ok ? 'ok' : 'error'}, ${result.tokens.total} tokens`);
+    const rounds = stop?.count();
+    if (rounds?.rounds) {
+      event({ attempt, step: step.id, kind: 'checks', outcome: rounds.passed ? 'passed in session' : 'failed in session', detail: `${rounds.rounds} round(s), sent back ${rounds.blocked} time(s)` });
+    }
     return { result, runtimeName };
   };
 

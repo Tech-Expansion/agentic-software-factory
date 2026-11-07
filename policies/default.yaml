@@ -2,6 +2,8 @@
 # adds the hosts a product needs. The owner edits that file; agents cannot (it is under .factory/).
 max_attempts: 3
 max_tokens_per_item: 3000000
+# Times a builder on Claude Code is sent back by the checks before it may finish (a Stop hook). 0 turns it off.
+check_rounds_in_session: 3
 denied_commands:
   - git push
   - git remote

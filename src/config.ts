@@ -43,6 +43,7 @@ export interface TrackerConfig {
 export interface Policy {
   max_attempts: number;
   max_tokens_per_item: number;
+  check_rounds_in_session: number;
   denied_commands: string[];
   approval_paths: string[];
   protected_paths: string[];
@@ -119,6 +120,7 @@ export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbo
   return {
     max_attempts: Math.min(base.max_attempts, override.max_attempts ?? Infinity),
     max_tokens_per_item: Math.min(base.max_tokens_per_item, override.max_tokens_per_item ?? Infinity),
+    check_rounds_in_session: Math.min(base.check_rounds_in_session ?? 0, override.check_rounds_in_session ?? Infinity),
     denied_commands: union(base.denied_commands, override.denied_commands),
     approval_paths: union(base.approval_paths, override.approval_paths),
     protected_paths: union(base.protected_paths, override.protected_paths),

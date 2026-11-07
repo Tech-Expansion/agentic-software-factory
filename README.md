@@ -123,6 +123,7 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code, 
   backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
 - Only the feature workflow exists, and deployment is not built. Jira is the only external tracker.
+- On Claude Code the builder runs the checks itself before it may finish (a Stop hook, [ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)); Codex has no such hook and relies on the runner's attempts.
 - A builder call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),
   most of it served from cache.
 
