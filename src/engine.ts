@@ -185,6 +185,12 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
 
     if (!failed) {
       const changed = stageAndList(worktree, base);
+      // Checked again here: a read-only step must not be able to slip a protected change into the commit.
+      const late = changed.filter((f) => matchesAny(f, policy.protected_paths));
+      if (late.length) {
+        restorePaths(worktree, base, late);
+        return finish('blocked', `protected files changed outside a build step: ${late.join(', ')}`);
+      }
       const flags = changed.filter((f) => matchesAny(f, policy.approval_paths));
       commitAll(worktree, `feat: ${item.title}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
       st.feedback = undefined;

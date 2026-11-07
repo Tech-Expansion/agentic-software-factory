@@ -108,6 +108,16 @@ test('changes to protected paths are put back and sent as feedback', async () =>
   assert.match(spec, /AC-001/);
 });
 
+test('a protected change made during review never reaches the commit', async () => {
+  const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { write: { 'specs/hello.md': 'rewritten' }, structured: verdict(true) }));
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'blocked');
+  assert.match(out!.reason!, /outside a build step: specs\/hello\.md/);
+  const wt = join(root, '.factory/worktrees/B-0001');
+  assert.match(readFileSync(join(wt, 'specs/hello.md'), 'utf8'), /AC-001/);
+  assert.equal(git(wt, ['rev-parse', 'HEAD']).trim(), git(root, ['rev-parse', 'main']).trim(), 'nothing was committed');
+});
+
 test('a runtime error blocks at once instead of retrying', async () => {
   const rt = fake(() => ({ ok: false, error: 'usage limit reached' }));
   const [out] = await run({ all: true, context: { runtime: () => rt } });
