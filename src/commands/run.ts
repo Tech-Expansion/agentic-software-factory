@@ -8,6 +8,8 @@ import { openProduct, runtimes, UsageError } from './context.js';
 export interface RunOptions {
   item?: string;
   all?: boolean;
+  /** The product root; found from the current directory when unset. */
+  root?: string;
   log?: (msg: string) => void;
   /** For tests. */
   context?: Partial<EngineContext>;
@@ -15,7 +17,7 @@ export interface RunOptions {
 
 /** Builds the next ready item, a given item, or (with `all`) every ready item until one blocks or none is left. */
 export async function run(opts: RunOptions = {}): Promise<ItemOutcome[]> {
-  const product = openProduct();
+  const product = openProduct(opts.root);
   const { paths, project } = product;
   if (!isRepo(paths.root)) throw new UsageError(`${paths.root} is not a git repository`);
   const base = project.base_branch ?? 'main';

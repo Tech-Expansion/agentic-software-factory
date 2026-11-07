@@ -5,16 +5,16 @@ import { appendEvent } from '../runlog.js';
 import { loadState, saveState } from '../state.js';
 import { openProduct, UsageError } from './context.js';
 
-function reviewItem(id: string) {
-  const product = openProduct();
+function reviewItem(id: string, root?: string) {
+  const product = openProduct(root);
   const state = loadState(product.paths.state);
   const st = state.items[id];
   return { product, state, st };
 }
 
 /** The user's approval: marks the item done on its branch, merges the branch, removes the worktree. */
-export function approve(id: string): { merged: string; flags: string[] } {
-  const { product, state, st } = reviewItem(id);
+export function approve(id: string, root?: string): { merged: string; flags: string[] } {
+  const { product, state, st } = reviewItem(id, root);
   const { paths, project } = product;
   if (st?.state !== 'review') throw new UsageError(`${id} is not waiting for review (${st?.state ?? 'never run'})`);
   const base = project.base_branch ?? 'main';

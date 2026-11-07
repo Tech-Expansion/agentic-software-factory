@@ -9,6 +9,7 @@ import { factoryHome } from './paths.js';
 import { version } from './version.js';
 import { UsageError } from './commands/context.js';
 import { discover } from './commands/discover.js';
+import { evaluate, formatEval } from './commands/eval.js';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
 import { approve, describe, reject, retry } from './commands/review.js';
@@ -28,6 +29,8 @@ Usage:
   asf retry <id>                    let a blocked item run again
   asf report [--date YYYY-MM-DD]    daily report
   asf projects                      products registered on this machine
+  asf eval [--case <id>] [--cases <dir>] [--out <file>] [--keep]
+                                    build the eval cases and score them against hidden tests
 `;
 
 async function main(argv: string[]): Promise<number> {
@@ -39,6 +42,10 @@ async function main(argv: string[]): Promise<number> {
       item: { type: 'string' },
       all: { type: 'boolean' },
       date: { type: 'string' },
+      case: { type: 'string' },
+      cases: { type: 'string' },
+      out: { type: 'string' },
+      keep: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
@@ -98,6 +105,11 @@ async function main(argv: string[]): Promise<number> {
       const list = existsSync(file) ? ((parse(readFileSync(file, 'utf8')) as { name: string; path: string }[] | null) ?? []) : [];
       for (const p of list) console.log(`${p.name}\t${p.path}`);
       return 0;
+    }
+    case 'eval': {
+      const r = await evaluate({ cases: values.cases, only: values.case, out: values.out, keep: values.keep, log: (m) => console.log(m) });
+      console.log(`\n${formatEval(r)}`);
+      return r.summary.breaches || r.summary.errors ? 2 : 0;
     }
     default:
       throw new UsageError(`unknown command: ${cmd}\n\n${HELP}`);
