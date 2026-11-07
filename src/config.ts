@@ -35,6 +35,8 @@ export interface TrackerConfig {
   project: string;
   owner: string;
   intake_status?: string;
+  /** More JQL the intake must match, for a project shared by several products. */
+  intake_filter?: string;
   statuses?: Partial<Record<TrackedState, string>>;
   /** A ticket for the owner's view of the whole product: a daily digest, and the board on "/status". */
   digest?: string;

@@ -158,6 +158,12 @@ test('jira over acli: the owner’s tickets only, text from ADF, plain flags', a
     const which = args.includes('search') ? 'search' : args.includes('list') ? 'list' : '';
     return { code: 0, stdout: which ? JSON.stringify(out[which]) : '', stderr: '' };
   });
+  const filtered = jira({ kind: 'jira', project: 'AI', owner: OWNER, intake_filter: 'labels = cardano-wallet AND issuetype != Epic' }, async (args) => {
+    calls.push(args);
+    return { code: 0, stdout: '[]', stderr: '' };
+  });
+  await filtered.intake();
+  assert.match(calls.pop()!.join(' '), /status = "To Do" AND \(labels = cardano-wallet AND issuetype != Epic\) ORDER BY created ASC/);
   const tickets = await t.intake();
   assert.deepEqual(tickets.map((x) => [x.key, x.body]), [['AI-1', 'Hello\n\n- one']]);
   assert.match(calls[0]!.join(' '), /--jql project = "AI" AND reporter = "acc-owner" AND status = "To Do"/);

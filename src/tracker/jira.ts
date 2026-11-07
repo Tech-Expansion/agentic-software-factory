@@ -81,7 +81,8 @@ export function jira(cfg: TrackerConfig, run: Runner = acli): Tracker {
   return {
     name: 'jira',
     async intake() {
-      const jql = `project = ${quote(cfg.project)} AND reporter = ${quote(cfg.owner)} AND status = ${quote(cfg.intake_status ?? 'To Do')} ORDER BY created ASC`;
+      const extra = cfg.intake_filter ? ` AND (${cfg.intake_filter})` : '';
+      const jql = `project = ${quote(cfg.project)} AND reporter = ${quote(cfg.owner)} AND status = ${quote(cfg.intake_status ?? 'To Do')}${extra} ORDER BY created ASC`;
       const found = await json(['jira', 'workitem', 'search', '--jql', jql, '--fields', 'key,summary,status,labels,description,reporter', '--paginate', '--json']);
       // The JQL already asks for the owner's tickets; checked again so a wrong query can never let others in.
       return list(found, 'issues', 'workItems', 'values').map(ticket).filter((t) => !t.reporter || t.reporter === cfg.owner);
