@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/run-event.schema.json",
+  "title": "One line of the run log (.factory/runs/<date>.jsonl)",
+  "type": "object",
+  "required": ["at", "item", "step", "kind", "outcome"],
+  "properties": {
+    "at": { "type": "string", "format": "date-time" },
+    "item": { "type": "string" },
+    "attempt": { "type": "integer" },
+    "step": { "type": "string" },
+    "kind": { "enum": ["agent", "checks", "item"] },
+    "role": { "type": "string" },
+    "runtime": { "type": "string" },
+    "model": { "type": "string" },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "input": { "type": "integer" },
+        "cached_input": { "type": "integer" },
+        "output": { "type": "integer" },
+        "total": { "type": "integer" }
+      }
+    },
+    "cost_usd": { "type": "number" },
+    "duration_ms": { "type": "integer" },
+    "outcome": { "type": "string" },
+    "detail": { "type": "string" }
+  }
+}

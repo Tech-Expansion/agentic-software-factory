@@ -1,0 +1,39 @@
+{
+  "name": "agentic-software-factory",
+  "version": "0.1.0",
+  "description": "Local-first agentic software factory: a team of specialized AI agents that turns rough ideas into tested, documented software using your own Claude Code or Codex subscription.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "asf": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.js",
+    "agents",
+    "skills",
+    "workflows",
+    "policies",
+    "templates",
+    "schemas"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/**/*.test.js\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tech-Expansion/agentic-software-factory.git"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}

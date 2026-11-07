@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/policy.schema.json",
+  "title": "Factory policy (policies/default.yaml, .factory/policy.yaml)",
+  "description": "A product policy can only tighten the default: limits take the lower value, lists are added to.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "max_attempts": { "type": "integer", "minimum": 1, "description": "Build attempts per item before it is blocked." },
+    "max_tokens_per_item": { "type": "integer", "minimum": 1, "description": "Tokens per item, all steps and attempts." },
+    "denied_commands": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Command prefixes no agent may run."
+    },
+    "approval_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns. An item whose diff touches one is flagged for the user's attention before approval."
+    },
+    "protected_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns no agent may change. A diff that touches one blocks the item."
+    }
+  }
+}

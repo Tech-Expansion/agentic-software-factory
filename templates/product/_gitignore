@@ -1,0 +1,4 @@
+# agentic-software-factory: local run state
+.factory/runs/
+.factory/worktrees/
+.factory/state.json

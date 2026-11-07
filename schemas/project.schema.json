@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/project.schema.json",
+  "title": "Factory settings of one product (.factory/project.yaml)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["factory_version", "name", "stage", "commands"],
+  "properties": {
+    "factory_version": { "type": "string", "description": "Factory version this product was set up with." },
+    "name": { "type": "string", "minLength": 1 },
+    "stage": { "enum": ["explore", "validate", "grow"] },
+    "hypothesis": { "type": "string" },
+    "success_metric": { "type": "string" },
+    "kill_criteria": { "type": "string" },
+    "base_branch": { "type": "string", "default": "main" },
+    "runtimes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": { "$ref": "#/definitions/runtime" },
+        "roles": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/runtime" }
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "description": "Model per role, passed to the CLI as is. Unset roles use the CLI default.",
+      "additionalProperties": { "type": "string" }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check"],
+      "properties": {
+        "setup": { "type": "array", "items": { "type": "string" } },
+        "check": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Lint, build and test commands. Run by the runner before any model review."
+        }
+      }
+    },
+    "opt_ins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backlog": { "enum": ["markdown"] },
+        "docs": { "enum": ["markdown"] },
+        "notifications": { "enum": ["desktop", "none"] }
+      }
+    }
+  },
+  "definitions": {
+    "runtime": { "enum": ["claude-code", "codex"] }
+  }
+}

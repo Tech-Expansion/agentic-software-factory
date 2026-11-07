@@ -1,0 +1,35 @@
+# Settings of this product for the agentic software factory.
+# Validated against schemas/project.schema.json. Agents cannot change this file in unattended runs.
+factory_version: "{{factory_version}}"
+name: "{{name}}"
+
+# explore: find out whether the idea is worth building. validate: prove it with real users. grow: build it properly.
+stage: explore
+
+# Settled in `asf discover`.
+hypothesis: ""
+success_metric: ""
+kill_criteria: ""
+
+base_branch: main
+
+runtimes:
+  default: claude-code
+  # A second vendor as verifier catches what the builder's model is blind to:
+  # roles:
+  #   verifier: codex
+
+# Model per role, passed to the CLI as is. Unset roles use the CLI's default.
+# models:
+#   builder: sonnet
+
+commands:
+  # Run once in each new worktree, for example: npm ci
+  setup: []
+  # Lint, build and test. Run before any model review: the cheapest gate there is.
+  check: []
+
+opt_ins:
+  backlog: markdown
+  docs: markdown
+  notifications: desktop
