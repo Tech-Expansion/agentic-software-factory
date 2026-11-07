@@ -22,6 +22,8 @@ export interface RunEvent {
   duration_ms?: number;
   outcome: string;
   detail?: string;
+  /** Tool calls the CLI refused in this step. */
+  denied?: string[];
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');

@@ -165,7 +165,7 @@ export async function runCase(
     const agent = events.filter((e) => e.kind === 'agent');
     result.tokens = agent.reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
     result.agentSteps = agent.length;
-    result.denied = agent.flatMap((e) => (e.detail?.startsWith('denied: ') ? e.detail.slice(8).split('; ') : []));
+    result.denied = agent.flatMap((e) => e.denied ?? []);
     const final = loadBacklog(paths.backlog).items;
     for (const id of ready) {
       const attempts = Math.max(0, ...agent.filter((e) => e.item === id).map((e) => e.attempt ?? 1));

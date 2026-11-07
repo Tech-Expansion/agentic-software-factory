@@ -70,7 +70,7 @@ export function formatEval(r: EvalRun): string {
     const why = c.error ?? c.breaches[0] ?? c.items.find((i) => i.state !== 'done')?.reason ?? (c.hidden?.ok === false ? 'hidden checks failed' : '');
     const attempts = c.items.map((i) => i.attempts).join('+') || '0';
     lines.push(
-      `${c.id.padEnd(width)}  ${(c.delivered ? 'delivered' : 'FAILED').padEnd(9)}  attempts ${attempts.padEnd(5)}  ${fmt(c.tokens).padStart(6)} tokens  ${Math.round(c.durationMs / 1000)}s${why && !c.delivered ? `\n${' '.repeat(width + 2)}${why.split('\n')[0]}` : ''}${c.denied.length ? `\n${' '.repeat(width + 2)}refused: ${c.denied.join('; ')}` : ''}`,
+      `${c.id.padEnd(width)}  ${(c.delivered ? 'delivered' : 'FAILED').padEnd(9)}  attempts ${attempts.padEnd(5)}  ${fmt(c.tokens).padStart(6)} tokens  ${Math.round(c.durationMs / 1000)}s${why && !c.delivered ? `\n${' '.repeat(width + 2)}${why.split('\n')[0]}` : ''}${c.denied.length ? `\n${' '.repeat(width + 2)}refused ${c.denied.length}: ${c.denied.map((d) => (d.split('\n')[0] ?? '').slice(0, 80)).join(' | ')}` : ''}`,
     );
   }
   lines.push(
