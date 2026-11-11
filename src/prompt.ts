@@ -6,22 +6,39 @@ import type { ProjectConfig } from './config.js';
 
 const stripFront = (text: string) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
 
-export function loadRole(name: string): string {
-  const file = join(factoryRoot, 'agents', `${name}.md`);
-  if (!existsSync(file)) throw new Error(`unknown role: ${name}`);
-  return stripFront(readFileSync(file, 'utf8'));
+function readPrompt(file: string): string | undefined {
+  return existsSync(file) ? stripFront(readFileSync(file, 'utf8')) : undefined;
 }
 
-export function loadSkill(name: string): string {
-  const file = join(factoryRoot, 'skills', name, 'SKILL.md');
-  if (!existsSync(file)) throw new Error(`unknown skill: ${name}`);
-  return stripFront(readFileSync(file, 'utf8'));
+/**
+ * The factory's text with the product's own added under "Product rules". A product adds to a role or skill and
+ * never replaces it, so it cannot drop the factory's rules; it may also bring a role or skill of its own.
+ */
+function layered(kind: string, name: string, own: string, product?: string): string {
+  const base = readPrompt(own);
+  const extra = product ? readPrompt(product) : undefined;
+  if (base === undefined && extra === undefined) throw new Error(`unknown ${kind}: ${name}`);
+  if (!base) return extra!;
+  return extra ? `${base}\n\n## Product rules\n\n${extra}` : base;
 }
 
-/** Role first, then only the skills the step names. Nothing item-specific, so it stays cacheable across items. */
-export function systemPrompt(role: string, skills: string[]): string {
-  const parts = [`# Your role\n\n${loadRole(role)}`];
-  for (const s of skills) parts.push(`# Skill: ${s}\n\n${loadSkill(s)}`);
+/** `local` is the product's .factory directory, where `agents/<name>.md` adds to the role. */
+export function loadRole(name: string, local?: string): string {
+  return layered('role', name, join(factoryRoot, 'agents', `${name}.md`), local && join(local, 'agents', `${name}.md`));
+}
+
+/** `local` is the product's .factory directory, where `skills/<name>/SKILL.md` adds to the skill. */
+export function loadSkill(name: string, local?: string): string {
+  return layered('skill', name, join(factoryRoot, 'skills', name, 'SKILL.md'), local && join(local, 'skills', name, 'SKILL.md'));
+}
+
+/**
+ * Role first, then only the skills the step names. Nothing item-specific, so it stays cacheable across items.
+ * `local` is the product's .factory directory, for the product's additions.
+ */
+export function systemPrompt(role: string, skills: string[], local?: string): string {
+  const parts = [`# Your role\n\n${loadRole(role, local)}`];
+  for (const s of skills) parts.push(`# Skill: ${s}\n\n${loadSkill(s, local)}`);
   return parts.join('\n\n');
 }
 

@@ -1,0 +1,18 @@
+# A small, clear change: no acceptance tests written first, so two agent calls fewer than feature. Chosen by the
+# owner per item (`workflow: quick`, or the label asf-quick on the ticket). A high-risk item never runs it, and a
+# quick change that touches a sensitive path is thrown away and built again through feature, tests first.
+name: quick
+steps:
+  - id: build
+    kind: agent
+    role: builder
+    skills: [implement-backlog-item]
+    access: write
+  - id: check
+    kind: checks
+  - id: verify
+    kind: agent
+    role: verifier
+    skills: [verify-against-criteria]
+    access: read
+    output: verdict

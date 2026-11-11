@@ -12,7 +12,7 @@ import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
 import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
 import type { AgentResult, Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
-import { loadWorkflow, type AgentStep, type Workflow } from './workflow.js';
+import { loadWorkflow, writesTests, type AgentStep, type Workflow } from './workflow.js';
 
 export interface EngineContext {
   paths: ProductPaths;
@@ -20,7 +20,7 @@ export interface EngineContext {
   policy: Policy;
   runtime: (name: RuntimeName) => Runtime;
   log?: (msg: string) => void;
-  /** The workflow items run through; the feature workflow when unset. */
+  /** The workflow every item runs through, whatever it asks for: an ablation in `asf eval`. */
   workflow?: Workflow;
 }
 
@@ -69,6 +69,22 @@ export function formatPlan(p: Plan): string {
   return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}`;
 }
 
+/**
+ * The workflow an item runs: its own `workflow:`, else the product's, else feature. A high-risk item always runs
+ * feature, which must write acceptance tests first; a product that replaced feature with one that does not gets the
+ * item blocked instead of built untested.
+ */
+export function selectWorkflow(paths: ProductPaths, project: ProjectConfig, item: BacklogItem): Workflow {
+  if (item.risk === 'high') return testedFeature(paths, 'a high-risk item');
+  return loadWorkflow(item.workflow ?? project.workflow ?? 'feature', [], paths.factory);
+}
+
+function testedFeature(paths: ProductPaths, who: string): Workflow {
+  const wf = loadWorkflow('feature', [], paths.factory);
+  if (!writesTests(wf)) throw new Error(`the product's feature workflow has no tests step, and ${who} gets acceptance tests first`);
+  return wf;
+}
+
 /** The branch items start from: the integration branch, created from the base branch the first time. */
 export function integrationBase(root: string, project: ProjectConfig): string {
   const base = project.base_branch ?? 'main';
@@ -105,7 +121,8 @@ function stopHook(paths: ProductPaths, item: string, name: string, cfg: Omit<Sto
   };
 }
 
-export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: Workflow = ctx.workflow ?? loadWorkflow('feature')): Promise<ItemOutcome> {
+/** Runs one item. `given` is the workflow to use instead of the item's own: feature, when a quick change escalates. */
+export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Workflow): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
   // Items branch from the integration branch when there is one, so each builds on what is already merged.
   const base = integrationBase(paths.root, project);
@@ -152,6 +169,13 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     return { id: item.id, state: 'paused', reason: st.reason, tokens: st.tokens, flags: [], resumeAt: r.rateLimit?.resetsAt ? r.rateLimit.resetsAt * 1000 : undefined };
   };
 
+  let workflow: Workflow;
+  try {
+    workflow = given ?? ctx.workflow ?? selectWorkflow(paths, project, item);
+  } catch (err) {
+    return finish('blocked', (err as Error).message);
+  }
+
   const fresh = !existsSync(worktree);
   ensureWorktree(paths.root, worktree, branch, base);
   // Tests written for an earlier run stay locked, as long as the branch still has them.
@@ -181,7 +205,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         : undefined;
     const result = await ctx.runtime(runtimeName).call({
       cwd: worktree,
-      systemPrompt: systemPrompt(step.role, step.skills),
+      systemPrompt: systemPrompt(step.role, step.skills, paths.factory),
       prompt: itemPrompt({
         root: worktree,
         project,
@@ -321,6 +345,23 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         if (tampered.length) {
           failed = `Tests may not be deleted, skipped or focused to get an item through. Undo this, and fix the code instead (if a test is wrong, say so in your summary):\n${tampered.map((t) => `- ${t}`).join('\n')}`;
           break;
+        }
+        // A change without tests written first must not reach a sensitive path: built again, tests first.
+        const sensitive = !testsStep && !ctx.workflow ? changed.filter((f) => matchesAny(f, policy.sensitive_paths)) : [];
+        if (sensitive.length) {
+          let feature: Workflow;
+          try {
+            feature = testedFeature(paths, `a change to ${sensitive.join(', ')}`);
+          } catch (err) {
+            return finish('blocked', (err as Error).message);
+          }
+          git(worktree, ['reset', '-q', '--hard', base]);
+          git(worktree, ['clean', '-q', '-fd']);
+          st.feedback = undefined;
+          save();
+          event({ attempt, step: step.id, kind: 'item', outcome: 'escalated', detail: `${workflow.name} touched ${sensitive.join(', ')}; built again through ${feature.name}` });
+          log(`${item.id} touched sensitive paths in ${workflow.name}; building it again through ${feature.name}, tests first`);
+          return runItem(ctx, item, feature);
         }
         st.summary = result.text.slice(0, 4000);
       }

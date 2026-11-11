@@ -11,6 +11,8 @@ in its own git worktree until they pass; your product's own checks run; and a re
 against the item's acceptance criteria. Nothing reaches your main branch until you approve it:
 item by item with `asf approve`, or, with an integration branch, in batches with `asf release`, while changes to
 sensitive paths and high-risk items still wait for you one by one.
+A small, clear change can skip the tests written first (`workflow: quick`, or the label `asf-quick` on its ticket);
+a high-risk item never does, and a quick change that touches a sensitive path is built again with its tests first.
 When an item needed a second attempt or you rejected it, a read-only **retro** proposes what would stop the
 mistake next time, as a check rather than a longer prompt; you decide each lesson.
 
@@ -106,7 +108,7 @@ asf init my-idea && cd my-idea
 | --- | --- |
 | `agents/` | Role briefs: planner, analyst, tech lead, tester, builder, verifier, retro |
 | `skills/` | Skills the steps load, one folder each |
-| `workflows/` | Steps per kind of work (`feature.yaml`) |
+| `workflows/` | Steps per kind of work: `feature.yaml`, and `quick.yaml` for small changes without tests written first |
 | `policies/default.yaml` | What agents may not do, limits, paths that need your attention |
 | `templates/product/` | What `asf init` creates |
 | `schemas/` | JSON Schema for `project.yaml`, `policy.yaml`, backlog items, verdicts and run events |
@@ -116,13 +118,22 @@ asf init my-idea && cd my-idea
 A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code, and one `.factory/` folder. Delete
 `.factory/` and it is an ordinary repository. See [ADR 0002](docs/adr/0002-repository-layout.md).
 
+A product shapes its team without changing the factory ([ADR 0009](docs/adr/0009-product-overrides-and-the-quick-workflow.md)):
+
+- `.factory/agents/<role>.md` and `.factory/skills/<name>/SKILL.md` are added to the factory's role or skill under
+  "Product rules", never instead of it.
+- `.factory/workflows/<name>.yaml` replaces the factory's workflow of that name, or adds one.
+- `workflow:` in `project.yaml` sets the product's default; `workflow:` on an item, or a ticket label `asf-<name>`,
+  picks one for that item.
+
 ## Known limits
 
 - Agent commands and checks run in a sandbox with no credentials and network only to package registries, not in a
   container. Codex has no network but can read what its user can; the secret scan before each commit is the
   backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
-- Only the feature workflow exists, and deployment is not built. Jira is the only external tracker.
+- Two workflows ship, feature and quick; the owner picks quick, the analyst does not. Deployment is not built. Jira
+  is the only external tracker.
 - On Claude Code the builder runs the checks itself before it may finish (a Stop hook, [ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)); Codex has no such hook and relies on the runner's attempts.
 - A builder call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),
   most of it served from cache.

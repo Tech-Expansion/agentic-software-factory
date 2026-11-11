@@ -24,6 +24,8 @@ export interface ProjectConfig {
   runtimes?: { default?: RuntimeName; roles?: Record<string, RuntimeName> };
   models?: Record<string, string>;
   commands: { setup?: string[]; check: string[] };
+  /** The workflow items run unless they name another; feature when unset. */
+  workflow?: string;
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
   tracker?: TrackerConfig;
 }

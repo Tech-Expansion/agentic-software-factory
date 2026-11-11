@@ -83,6 +83,11 @@
         }
       }
     },
+    "workflow": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The workflow items run unless they name their own; feature when unset. The product's .factory/workflows/<name>.yaml replaces the factory's."
+    },
     "opt_ins": {
       "type": "object",
       "additionalProperties": false,

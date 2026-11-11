@@ -176,3 +176,9 @@ test('jira over acli: the owner’s tickets only, text from ADF, plain flags', a
   const failing = jira({ kind: 'jira', project: 'AI', owner: OWNER }, async () => ({ code: 1, stdout: '', stderr: 'not logged in' }));
   await assert.rejects(failing.intake(), /not logged in/);
 });
+
+test('the label asf-<name> on a ticket picks the workflow its item is built with', async () => {
+  const j = memory([{ key: 'AI-8', title: 'Fix a typo', body: 'Typo in the README.', status: 'To Do', labels: ['cardano-wallet', 'asf-quick'], reporter: OWNER }]);
+  await sync({ tracker: j.tracker });
+  assert.match(readFileSync(join(root, 'backlog/0001-fix-a-typo.md'), 'utf8'), /tracker: AI-8\nworkflow: quick\n---/);
+});

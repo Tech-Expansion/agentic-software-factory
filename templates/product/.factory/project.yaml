@@ -23,6 +23,10 @@ runtimes:
 # models:
 #   builder: sonnet
 
+# The workflow items run unless they name their own (`workflow:` on the item, or the ticket label asf-<name>).
+# .factory/workflows/<name>.yaml replaces the factory's workflow of that name.
+# workflow: feature
+
 commands:
   # Run once in each new worktree, for example: npm ci
   setup: []

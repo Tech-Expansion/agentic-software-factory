@@ -72,7 +72,7 @@ export async function retro(ctx: EngineContext, item: BacklogItem, outcome: Item
   const worktree = join(paths.worktrees, item.id);
   const result = await ctx.runtime(runtimeName).call({
     cwd: existsSync(worktree) ? worktree : paths.root,
-    systemPrompt: systemPrompt('retro', ['run-retro']),
+    systemPrompt: systemPrompt('retro', ['run-retro'], paths.factory),
     prompt: retroPrompt(item, outcome, failed, lessons),
     access: 'read',
     model: project.models?.retro,

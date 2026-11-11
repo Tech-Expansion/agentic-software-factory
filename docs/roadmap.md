@@ -79,8 +79,9 @@ engineering, Kent Beck on agents and tests, Simon Willison's lethal trifecta, De
 
 ## Milestones
 
-Where we are (2026-11-07): M0 to M6 are built and covered by tests with a fake runtime; the Jira adapter is not yet
-checked against the real `acli`. M7 has not started.
+Where we are (2026-11-11): M0 to M6 are built and covered by tests with a fake runtime; the Jira adapter is not yet
+checked against the real `acli`. M7 has not started. Products can add to roles and skills and bring their own
+workflows, and a quick workflow skips the tests written first for small changes (ADR 0009).
 
 ### M0. Measure first
 

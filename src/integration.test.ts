@@ -6,7 +6,9 @@ import { beforeEach, test } from 'node:test';
 import { init } from './commands/init.js';
 import { approve, reject, release, releasable } from './commands/review.js';
 import { run } from './commands/run.js';
+import { validateProduct } from './commands/validate.js';
 import { git } from './git.js';
+import { readEvents } from './runlog.js';
 import { loadState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
@@ -110,4 +112,71 @@ test('a high-risk item is planned, the owner approves the plan, and the build fo
   assert.ok(built?.flags.includes('risk: high'));
   const builder = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
   assert.match(builder.prompt, /Plan approved by the owner[\s\S]*CIP-1854[\s\S]*src\/keys\/sign\.js/);
+});
+
+const commitItems = () => {
+  git(root, ['add', '-A']);
+  git(root, ['commit', '-q', '-m', 'items']);
+};
+
+test('a quick item is built without acceptance tests written first', async () => {
+  item(1, 'workflow: quick\n');
+  commitItems();
+  const rt = team();
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'merged');
+  assert.equal(rt.calls.filter((c) => c.writeOnly).length, 0, 'no tester');
+  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'read'], 'build, then verify');
+});
+
+test('a quick change to a sensitive path is thrown away and built again, tests first', async () => {
+  item(1, 'workflow: quick\n', 'keys/sign.txt');
+  commitItems();
+  const rt = team();
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  assert.deepEqual(out?.flags, ['keys/sign.txt']);
+  assert.deepEqual(rt.calls.map((c) => (c.writeOnly ? 'tests' : c.access)), ['write', 'tests', 'write', 'read'], 'the quick build was not verified; feature ran from its tests step');
+  const escalated = readEvents(join(root, '.factory/runs')).find((e) => e.outcome === 'escalated');
+  assert.match(escalated?.detail ?? '', /quick touched keys\/sign\.txt; built again through feature/);
+});
+
+test('a high-risk item runs feature whatever workflow it names', async () => {
+  item(1, 'risk: high\nworkflow: quick\n');
+  commitItems();
+  const [out] = await run({ context: { runtime: () => team() } });
+  assert.equal(out?.state, 'plan-review');
+});
+
+test('a product adds rules to a role and brings its own workflow', async () => {
+  mkdirSync(join(root, '.factory/agents'), { recursive: true });
+  mkdirSync(join(root, '.factory/workflows'), { recursive: true });
+  writeFileSync(join(root, '.factory/agents/builder.md'), '---\nname: builder\n---\nNever log a mnemonic.\n');
+  writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: builder, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'workflow: lean\n');
+  item(1);
+  commitItems();
+  assert.deepEqual(validateProduct().errors, []);
+  const rt = team();
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'merged');
+  assert.equal(rt.calls.length, 1, 'lean has no tester and no verifier');
+  assert.match(rt.calls[0]!.systemPrompt, /You are the builder[\s\S]*## Product rules\n\nNever log a mnemonic\./, 'added after the factory\'s role, not instead of it');
+});
+
+test('a product feature workflow without tests blocks a high-risk item instead of building it untested', async () => {
+  mkdirSync(join(root, '.factory/workflows'), { recursive: true });
+  writeFileSync(join(root, '.factory/workflows/feature.yaml'), 'name: feature\nsteps:\n  - { id: build, kind: agent, role: builder, skills: [implement-backlog-item], access: write }\n');
+  writeFileSync(join(root, '.factory/workflows/bad.yaml'), 'name: bad\nsteps:\n  - { id: build, kind: agent, role: ghost, skills: [nothing], access: write }\n');
+  item(1, 'risk: high\n');
+  commitItems();
+  const v = validateProduct();
+  assert.deepEqual(v.errors, ['.factory/workflows/bad.yaml: workflow bad, step build: unknown role: ghost', '.factory/workflows/bad.yaml: workflow bad, step build: unknown skill: nothing']);
+  assert.ok(v.warnings.some((w) => /feature\.yaml has no tests step/.test(w)));
+  const rt = team();
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'blocked');
+  assert.match(out?.reason ?? '', /no tests step, and a high-risk item gets acceptance tests first/);
+  assert.equal(rt.calls.length, 0);
 });

@@ -59,6 +59,11 @@
         "high"
       ],
       "description": "high: a plan is approved by the owner before the build, and the change is approved on its own before it merges. For keys, signing, money, auth."
+    },
+    "workflow": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The workflow to build it with: workflows/<name>.yaml, or the product's .factory/workflows/<name>.yaml. quick skips the acceptance tests written first; a high-risk item always runs feature."
     }
   }
 }

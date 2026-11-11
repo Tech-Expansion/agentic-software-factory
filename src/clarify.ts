@@ -70,7 +70,7 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
   const runtimeName = runtimeFor(project, 'analyst');
   const result = await ctx.runtime(runtimeName).call({
     cwd: paths.root,
-    systemPrompt: systemPrompt('analyst', ['clarify-requirement']),
+    systemPrompt: systemPrompt('analyst', ['clarify-requirement'], paths.factory),
     prompt: clarifyPrompt({ root: paths.root, project, item, previous: previous && { questions: previous.questions, answers: previous.answers } }),
     access: 'read',
     model: project.models?.analyst,

@@ -15,6 +15,8 @@ export interface BacklogItem {
   depends_on?: string[];
   /** high: plan approved before the build, change approved on its own. */
   risk?: 'high';
+  /** The workflow to build it with, instead of the product's: `quick` for a small, clear change. */
+  workflow?: string;
   /** The ticket this item comes from. */
   tracker?: string;
   file: string;

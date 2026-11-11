@@ -14,7 +14,7 @@ export function discover(): Promise<number> {
   const runtime = runtimes[runtimeFor(project, 'planner')];
   return runtime.interactive({
     cwd: paths.root,
-    systemPrompt: systemPrompt('planner', SKILLS),
+    systemPrompt: systemPrompt('planner', SKILLS, paths.factory),
     prompt: OPENING,
     model: project.models?.planner,
   });
