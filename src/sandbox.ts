@@ -23,16 +23,12 @@ export function scrubEnv(env: NodeJS.ProcessEnv, secretNames: string[]): NodeJS.
 }
 
 /**
- * Variables that let common toolchains work inside the sandbox, set for checks and for agent commands alike:
- * - MSBuild's source-control queries read `.gitmodules`, which the sandbox keeps unreadable on Linux when it is
- *   absent; they only stamp commit information into build output.
- * - On macOS the sandbox matches loopback connections only on IPv4 and IPv6 addresses, not on the dual-stack
- *   sockets .NET opens by default, so `dotnet test` cannot reach its test host unless .NET uses IPv4.
+ * Variables that let a toolchain work inside the sandbox, set for checks and for agent commands alike. None is
+ * needed for the stacks the eval cases cover; a stack that fails only in the sandbox gets its fix here, with the
+ * reason.
  */
-export function toolchainEnv(sb: SandboxPolicy): Record<string, string> {
-  const env: Record<string, string> = { EnableSourceControlManagerQueries: 'false' };
-  if (sb.local_binding && process.platform === 'darwin') env.DOTNET_SYSTEM_NET_DISABLEIPV6 = '1';
-  return env;
+export function toolchainEnv(_sb: SandboxPolicy): Record<string, string> {
+  return {};
 }
 
 /** Settings for Anthropic's sandbox runtime (`srt`), which wraps the runner's own checks. */
@@ -59,10 +55,10 @@ export function claudeSandbox(sb: SandboxPolicy): object {
 
 /**
  * On Linux the sandbox can only make a path writable if it exists, so the package caches are created first;
- * otherwise a first `dotnet restore` finds `~/.dotnet` read-only.
+ * otherwise a first install finds its cache read-only.
  */
 export function prepareWritable(sb: SandboxPolicy): void {
-  // The sandbox points TMPDIR at /tmp/claude without creating it; MSBuild then fails to make its temp folder.
+  // The sandbox points TMPDIR at /tmp/claude without creating it; a tool that writes temp files then fails.
   mkdirSync('/tmp/claude', { recursive: true });
   for (const p of sb.write_allow) if (p.startsWith('~/')) mkdirSync(join(homedir(), p.slice(2)), { recursive: true });
 }

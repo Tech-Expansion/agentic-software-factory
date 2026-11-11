@@ -79,3 +79,10 @@ We take option 2, and keep secrets out of the environment whatever the sandbox d
 - Registries on the allowlist are a way out only for something that can publish to them, and publishing commands
   are denied. Package installs still pull third-party code; that is the product's risk, as it is for a person.
 - The secret scan only knows the formats it lists. It is a backstop, not the boundary.
+
+## Update 2026-11-12
+
+.NET is no longer a stack the factory ships for: its eval case, its registry hosts, caches, test file patterns and
+toolchain variables (`EnableSourceControlManagerQueries`, `DOTNET_SYSTEM_NET_DISABLEIPV6`) were removed from the
+defaults. The findings above still hold; a .NET product adds what it needs to its own `.factory/policy.yaml`, and the
+variables come back in `toolchainEnv` with an eval case that shows them.

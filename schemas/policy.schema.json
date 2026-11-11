@@ -49,7 +49,7 @@
         "secret_env": { "type": "array", "items": { "type": "string" } },
         "local_binding": {
           "type": "boolean",
-          "description": "Let sandboxed processes listen and connect on loopback. On macOS this reaches every local port of the host, so it is off unless a product needs it (.NET test runs do)."
+          "description": "Let sandboxed processes listen and connect on loopback. On macOS this reaches every local port of the host, so it is off unless a product's tests need it."
         }
       }
     }
