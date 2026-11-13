@@ -1,6 +1,6 @@
 # {{name}}: product brief
 
-<!-- Written with the planner in `asf discover`. -->
+<!-- Written with the product owner in `asf discover`. -->
 
 ## Problem
 ## Users

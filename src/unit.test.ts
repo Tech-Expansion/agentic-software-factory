@@ -145,3 +145,12 @@ test('the eval cases in this repository are valid', () => {
   assert.ok(cases.length >= 6);
   for (const c of cases) assert.ok(existsSync(join(c.dir, 'reference')), `${c.id} has a reference solution`);
 });
+
+test('settings keyed by an old role name still apply to the role it became', async () => {
+  const { modelFor, runtimeFor } = await import('./config.js');
+  const project = { models: { builder: 'sonnet', qa: 'opus', verifier: 'haiku' }, runtimes: { roles: { verifier: 'codex' as const } } } as never;
+  assert.equal(modelFor(project, 'developer'), 'sonnet');
+  assert.equal(modelFor(project, 'qa'), 'opus', 'the new name wins over an old one');
+  assert.equal(runtimeFor(project, 'qa'), 'codex');
+  assert.equal(runtimeFor(project, 'developer'), 'claude-code');
+});
