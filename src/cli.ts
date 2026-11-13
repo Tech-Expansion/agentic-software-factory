@@ -13,6 +13,7 @@ import { decideLesson, loadLessons } from './retro.js';
 import { discover } from './commands/discover.js';
 import { answer, clarify, questions } from './commands/clarify.js';
 import { clarified, decide } from './commands/decide.js';
+import { deploy } from './commands/deploy.js';
 import { findProductRoot } from './paths.js';
 import { evaluate, formatEval } from './commands/eval.js';
 import { serve } from './commands/serve.js';
@@ -51,6 +52,8 @@ Setting up:
 
 Shipping:
   asf release [--dry]               merge the integration branch into the base branch
+  asf deploy <env> [--yes]          show what a deploy will run and what changed since the last
+                                    one; with --yes, run the product's deploy commands for <env>
 
 More:
   asf show <id>                     where an item's work is and why it stopped
@@ -189,6 +192,11 @@ async function main(argv: string[]): Promise<number> {
       const o = values.accept ? answer(id, undefined, '', { accept: true }) : answer(id, need(1, 'question id (Q1, ...)'), args.slice(2).join(' '));
       console.log(clarified(o));
       return 0;
+    }
+    case 'deploy': {
+      const r = deploy(need(0, 'environment'), { yes: values.yes });
+      console.log(r.text);
+      return r.ok ? 0 : 2;
     }
     case 'release': {
       if (values.dry) {

@@ -196,3 +196,15 @@ test('specialists come in only when the change calls for them', async () => {
   await run({ item: 'B-0002', context: { runtime: () => plain } });
   assert.deepEqual(reviewers(plain), ['QA'], 'no specialist for a plain change');
 });
+
+test('an infra item is built by DevOps and always reviewed for security, and waits for the owner', async () => {
+  item(1, 'workflow: infra\n', '.github/workflows/ci.yml');
+  commitItems();
+  assert.deepEqual(validateProduct().errors, []);
+  const rt = team();
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review', 'CI files are approval paths');
+  assert.deepEqual(out?.flags, ['.github/workflows/ci.yml']);
+  const who = rt.calls.map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
+  assert.deepEqual(who, ['the DevOps engineer', 'QA', 'the security reviewer']);
+});

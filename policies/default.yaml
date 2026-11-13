@@ -26,6 +26,16 @@ approval_paths:
   - "**/migrations/**"
   - "**/Dockerfile"
   - ".github/**"
+  # What runs with the owner's credentials at deploy time: changed only with the owner's approval.
+  - "**/.gitlab-ci.yml"
+  - "**/deploy*"
+  - "**/deploy/**"
+  - "**/infra/**"
+  - "**/*.tf"
+  - "**/k8s/**"
+  - "**/helm/**"
+  - "**/docker-compose*"
+  - "**/compose.y*ml"
 # Unattended runs may not change these. Planning them is done with the user, in `asf discover`.
 protected_paths:
   - ".factory/**"

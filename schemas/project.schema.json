@@ -98,6 +98,17 @@
         }
       }
     },
+    "deploy": {
+      "type": "object",
+      "description": "Commands per environment for `asf deploy <env>`, for example production: [\"./deploy.sh production\"]. The runner runs them, outside the sandbox and with your own environment and credentials, only when you run asf deploy; agents never do.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1
+      }
+    },
     "opt_ins": {
       "type": "object",
       "additionalProperties": false,
