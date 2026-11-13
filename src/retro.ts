@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { loadBacklog, type BacklogItem } from './backlog.js';
-import { runtimeFor, validate, vendorSchema } from './config.js';
+import { modelFor, runtimeFor, validate, vendorSchema } from './config.js';
 import type { Product } from './commands/context.js';
 import { UsageError } from './commands/context.js';
 import type { EngineContext, ItemOutcome } from './engine.js';
@@ -68,14 +68,14 @@ export async function retro(ctx: EngineContext, item: BacklogItem, outcome: Item
   const failed = failures(readEvents(paths.runs), item.id);
   if (!failed.length) return [];
   const lessons = loadLessons(paths.factory);
-  const runtimeName = runtimeFor(project, 'retro');
+  const runtimeName = runtimeFor(project, 'scrum-master');
   const worktree = join(paths.worktrees, item.id);
   const result = await ctx.runtime(runtimeName).call({
     cwd: existsSync(worktree) ? worktree : paths.root,
-    systemPrompt: systemPrompt('retro', ['run-retro'], paths.factory),
+    systemPrompt: systemPrompt('scrum-master', ['run-retro'], paths.factory),
     prompt: retroPrompt(item, outcome, failed, lessons),
     access: 'read',
-    model: project.models?.retro,
+    model: modelFor(project, 'scrum-master'),
     schema: vendorSchema('lessons'),
     allowedCommands: [],
     deniedCommands: policy.denied_commands,
@@ -90,9 +90,9 @@ export async function retro(ctx: EngineContext, item: BacklogItem, outcome: Item
     item: item.id,
     step: 'retro',
     kind: 'agent',
-    role: 'retro',
+    role: 'scrum-master',
     runtime: runtimeName,
-    model: project.models?.retro,
+    model: modelFor(project, 'scrum-master'),
     tokens: result.tokens,
     duration_ms: result.durationMs,
     outcome: errors.length ? 'error' : `${proposed.length} lesson(s)`,

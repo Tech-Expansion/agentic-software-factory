@@ -48,7 +48,7 @@ export interface ClarifyOptions {
   context?: Partial<EngineContext>;
 }
 
-/** Runs the analyst on new items (or one), and makes each ready that has nothing blocking left. */
+/** Runs the product owner on new items (or one), and makes each ready that has nothing blocking left. */
 export async function clarify(opts: ClarifyOptions = {}): Promise<ClarifyOutcome[]> {
   const product = openProduct(opts.root);
   const log = opts.log ?? (() => {});
@@ -64,7 +64,7 @@ export async function clarify(opts: ClarifyOptions = {}): Promise<ClarifyOutcome
       outcomes.push({ id: item.id, open: openQuestions(previous).length, ready: false, note: 'already asked; answer with `asf answer`, or use --again' });
       continue;
     }
-    log(`${item.id}: asking the analyst`);
+    log(`${item.id}: asking the product owner`);
     const c = await analyze(ctx, item, previous);
     saveClarification(product.paths.factory, c);
     const open = openQuestions(c).length;

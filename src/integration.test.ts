@@ -20,7 +20,7 @@ process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.in
 const plan = { approach: 'Use CIP-1854 keys.', files: ['src/keys/sign.js'], tests: ['AC-001 a missing gate signature is refused'], risks: ['a wrong key signs'] };
 const pass = { verdict: 'pass', criteria: [], findings: [], summary: 'good' };
 
-/** Each item writes the file its body names; the tech lead returns a plan. */
+/** Each item writes the file its body names; the architect returns a plan. */
 function team(): Runtime & { calls: AgentCall[] } {
   const calls: AgentCall[] = [];
   return {
@@ -29,7 +29,7 @@ function team(): Runtime & { calls: AgentCall[] } {
     async call(c): Promise<AgentResult> {
       calls.push(c);
       const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
-      if (c.systemPrompt.includes('You are the tech lead')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
+      if (c.systemPrompt.includes('You are the architect')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
       if (c.access === 'write' && !c.writeOnly) {
         const file = /writes (\S+)/.exec(c.prompt)![1]!;
         mkdirSync(join(c.cwd, file, '..'), { recursive: true });
@@ -162,7 +162,7 @@ test('a product adds rules to a role and brings its own workflow', async () => {
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'merged');
   assert.equal(rt.calls.length, 1, 'lean has no tester and no verifier');
-  assert.match(rt.calls[0]!.systemPrompt, /You are the builder[\s\S]*## Product rules\n\nNever log a mnemonic\./, 'added after the factory\'s role, not instead of it');
+  assert.match(rt.calls[0]!.systemPrompt, /You are the developer[\s\S]*## Product rules\n\nNever log a mnemonic\./, 'added after the factory\'s role, not instead of it');
 });
 
 test('a product feature workflow without tests blocks a high-risk item instead of building it untested', async () => {

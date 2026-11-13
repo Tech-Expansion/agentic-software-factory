@@ -5,20 +5,20 @@ name: feature
 steps:
   - id: tests
     kind: agent
-    role: tester
+    role: qa
     skills: [write-acceptance-tests]
     access: write
     scope: tests
   - id: build
     kind: agent
-    role: builder
+    role: developer
     skills: [implement-backlog-item]
     access: write
   - id: check
     kind: checks
   - id: verify
     kind: agent
-    role: verifier
+    role: qa
     skills: [verify-against-criteria]
     access: read
     output: verdict

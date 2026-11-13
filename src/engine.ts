@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
+import { modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
@@ -55,7 +55,7 @@ export function rateLimited(r: AgentResult): boolean {
   return LIMIT.test(r.error ?? '');
 }
 
-const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'tech-lead', skills: ['plan-change'], access: 'read' };
+const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'architect', skills: ['plan-change'], access: 'read' };
 
 interface Plan {
   approach: string;
@@ -217,7 +217,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
         plan: st.plan?.approved ? st.plan.text : undefined,
       }),
       access: step.access,
-      model: project.models?.[step.role],
+      model: modelFor(project, step.role),
       schema: schema ? vendorSchema(schema) : step.output === 'verdict' ? vendorSchema('verdict') : undefined,
       allowedCommands: commands,
       deniedCommands: policy.denied_commands,
@@ -234,7 +234,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
       kind: 'agent',
       role: step.role,
       runtime: runtimeName,
-      model: project.models?.[step.role],
+      model: modelFor(project, step.role),
       tokens: result.tokens,
       cost_usd: result.costUsd,
       duration_ms: result.durationMs,

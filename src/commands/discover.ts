@@ -1,4 +1,4 @@
-import { runtimeFor } from '../config.js';
+import { modelFor, runtimeFor } from '../config.js';
 import { systemPrompt } from '../prompt.js';
 import { openProduct, runtimes } from './context.js';
 
@@ -11,11 +11,11 @@ const OPENING =
 /** An interactive session with the planner, in the user's own CLI. Planning is done with the user, never unattended. */
 export function discover(): Promise<number> {
   const { paths, project } = openProduct();
-  const runtime = runtimes[runtimeFor(project, 'planner')];
+  const runtime = runtimes[runtimeFor(project, 'product-owner')];
   return runtime.interactive({
     cwd: paths.root,
-    systemPrompt: systemPrompt('planner', SKILLS, paths.factory),
+    systemPrompt: systemPrompt('product-owner', SKILLS, paths.factory),
     prompt: OPENING,
-    model: project.models?.planner,
+    model: modelFor(project, 'product-owner'),
   });
 }

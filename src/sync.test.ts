@@ -48,7 +48,7 @@ function agents(): Runtime {
     name: 'claude-code',
     async call(c: AgentCall): Promise<AgentResult> {
       const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
-      if (c.systemPrompt.includes('You are the analyst')) {
+      if (c.systemPrompt.includes('You are the product owner')) {
         const structured = { understood: 'A wallet.', questions: [{ id: 'Q1', question: 'Which platform?', why: 'stack', options: ['web', 'mobile'], recommendation: 'web', blocking: true }], assumptions: [] };
         return { ok: true, text: '', structured, tokens, durationMs: 1 };
       }

@@ -120,6 +120,6 @@ test('asking again keeps what the owner answered and never reuses its ids', asyn
 
 test('an analysis that breaks the contract is refused', async () => {
   await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [q('Q1', true), q('Q1', false)], assumptions: [] }) } }), /not unique/);
-  await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /analyst failed/);
+  await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /product owner failed/);
   assert.equal(loadClarification(join(root, '.factory'), 'B-0001'), undefined);
 });

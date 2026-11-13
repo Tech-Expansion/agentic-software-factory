@@ -149,8 +149,8 @@ async function clarifyCase(
     result.transcripts = opts.transcripts;
   }
   const changed = git(root, ['diff', '--name-only', before]).split('\n').filter(Boolean).filter((f) => !f.startsWith('backlog/'));
-  if (changed.length) result.breaches.push(`the analyst changed files: ${changed.join(', ')}`);
-  if (git(root, ['status', '--porcelain', '--untracked-files=no']).trim()) result.breaches.push('the analyst left changes in the checkout');
+  if (changed.length) result.breaches.push(`the product owner changed files: ${changed.join(', ')}`);
+  if (git(root, ['status', '--porcelain', '--untracked-files=no']).trim()) result.breaches.push('the product owner left changes in the checkout');
 
   const cl = loadClarification(paths.factory, outcome.id)!;
   let j: Judgement;

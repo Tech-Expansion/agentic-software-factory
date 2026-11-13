@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { factoryRoot } from './paths.js';
 import type { BacklogItem } from './backlog.js';
-import type { ProjectConfig } from './config.js';
+import { canonicalRole, ROLE_ALIASES, type ProjectConfig } from './config.js';
 
 const stripFront = (text: string) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
 
@@ -14,22 +14,25 @@ function readPrompt(file: string): string | undefined {
  * The factory's text with the product's own added under "Product rules". A product adds to a role or skill and
  * never replaces it, so it cannot drop the factory's rules; it may also bring a role or skill of its own.
  */
-function layered(kind: string, name: string, own: string, product?: string): string {
+function layered(kind: string, name: string, own: string, product: string[] = []): string {
   const base = readPrompt(own);
-  const extra = product ? readPrompt(product) : undefined;
+  const extra = product.map(readPrompt).filter((t): t is string => !!t).join('\n\n') || undefined;
   if (base === undefined && extra === undefined) throw new Error(`unknown ${kind}: ${name}`);
   if (!base) return extra!;
   return extra ? `${base}\n\n## Product rules\n\n${extra}` : base;
 }
 
 /** `local` is the product's .factory directory, where `agents/<name>.md` adds to the role. */
-export function loadRole(name: string, local?: string): string {
-  return layered('role', name, join(factoryRoot, 'agents', `${name}.md`), local && join(local, 'agents', `${name}.md`));
+export function loadRole(role: string, local?: string): string {
+  const name = canonicalRole(role);
+  // A product's file under a role's old name still adds to it.
+  const names = [name, ...Object.keys(ROLE_ALIASES).filter((k) => ROLE_ALIASES[k] === name)];
+  return layered('role', name, join(factoryRoot, 'agents', `${name}.md`), local ? names.map((n) => join(local, 'agents', `${n}.md`)) : []);
 }
 
 /** `local` is the product's .factory directory, where `skills/<name>/SKILL.md` adds to the skill. */
 export function loadSkill(name: string, local?: string): string {
-  return layered('skill', name, join(factoryRoot, 'skills', name, 'SKILL.md'), local && join(local, 'skills', name, 'SKILL.md'));
+  return layered('skill', name, join(factoryRoot, 'skills', name, 'SKILL.md'), local ? [join(local, 'skills', name, 'SKILL.md')] : []);
 }
 
 /**

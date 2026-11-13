@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
-import { runtimeFor, validate, vendorSchema } from './config.js';
+import { modelFor, runtimeFor, validate, vendorSchema } from './config.js';
 import type { EngineContext } from './engine.js';
 import { clarifyPrompt, systemPrompt } from './prompt.js';
 import { appendEvent, saveTranscript } from './runlog.js';
@@ -67,13 +67,13 @@ export function decisionsSection(c: Clarification): string {
  */
 export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: Clarification): Promise<Clarification> {
   const { paths, project, policy } = ctx;
-  const runtimeName = runtimeFor(project, 'analyst');
+  const runtimeName = runtimeFor(project, 'product-owner');
   const result = await ctx.runtime(runtimeName).call({
     cwd: paths.root,
-    systemPrompt: systemPrompt('analyst', ['clarify-requirement'], paths.factory),
+    systemPrompt: systemPrompt('product-owner', ['clarify-requirement'], paths.factory),
     prompt: clarifyPrompt({ root: paths.root, project, item, previous: previous && { questions: previous.questions, answers: previous.answers } }),
     access: 'read',
-    model: project.models?.analyst,
+    model: modelFor(project, 'product-owner'),
     schema: vendorSchema('analysis'),
     allowedCommands: [],
     deniedCommands: policy.denied_commands,
@@ -90,9 +90,9 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
     item: item.id,
     step: 'clarify',
     kind: 'agent',
-    role: 'analyst',
+    role: 'product-owner',
     runtime: runtimeName,
-    model: project.models?.analyst,
+    model: modelFor(project, 'product-owner'),
     tokens: result.tokens,
     cost_usd: result.costUsd,
     duration_ms: result.durationMs,
@@ -100,7 +100,7 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
     detail: errors.length ? errors.join('; ') : undefined,
     denied: result.denied,
   });
-  if (errors.length) throw new Error(`the analyst failed on ${item.id}: ${errors.join('; ')}`);
+  if (errors.length) throw new Error(`the product owner failed on ${item.id}: ${errors.join('; ')}`);
   // Answered questions stay; new ones never take an id the owner has already answered.
   const kept = previous ? previous.questions.filter((q) => previous.answers[q.id]) : [];
   const used = new Set(kept.map((q) => q.id));
