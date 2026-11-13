@@ -1,5 +1,5 @@
 import { appendFileSync, readFileSync } from 'node:fs';
-import { loadBacklog, setStatus, subject, type BacklogItem } from '../backlog.js';
+import { addField, loadBacklog, setStatus, subject, type BacklogItem } from '../backlog.js';
 import { analyze, decisionsSection, loadClarification, openQuestions, saveClarification, type Clarification } from '../clarify.js';
 import type { EngineContext } from '../engine.js';
 import { commitFiles, currentBranch, isClean } from '../git.js';
@@ -34,7 +34,14 @@ function makeReady(product: Product, item: BacklogItem, c: Clarification): Clari
   const text = readFileSync(item.file, 'utf8');
   appendFileSync(item.file, `${text.endsWith('\n') ? '' : '\n'}\n${decisionsSection(c)}\n`);
   setStatus(item.file, 'ready');
-  commitFiles(root, [item.file], `${subject(item, `chore(backlog): ${item.id} is clear to build`)}\n\nClarified with the owner: ${Object.keys(c.answers).length} answer(s).\n`);
+  // A small item skips the tests written first, unless the item, the product or its risk already settle the workflow.
+  const quick = c.size === 'small' && !item.workflow && item.risk !== 'high' && (product.project.workflow ?? 'feature') === 'feature';
+  if (quick) addField(item.file, 'workflow', 'quick');
+  commitFiles(
+    root,
+    [item.file],
+    `${subject(item, `chore(backlog): ${item.id} is clear to build`)}\n\nClarified with the owner: ${Object.keys(c.answers).length} answer(s).${quick ? ' Small: built with the quick workflow.' : ''}\n`,
+  );
   return { ...out, ready: true };
 }
 

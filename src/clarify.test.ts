@@ -123,3 +123,15 @@ test('an analysis that breaks the contract is refused', async () => {
   await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /product owner failed/);
   assert.equal(loadClarification(join(root, '.factory'), 'B-0001'), undefined);
 });
+
+test('a small item is built with the quick workflow, unless it is high risk', async () => {
+  const rt = analyst({ understood: 'Fix a typo.', questions: [], assumptions: [], size: 'small' });
+  await clarify({ context: { runtime: () => rt } });
+  assert.match(readFileSync(item, 'utf8'), /^---\nid: B-0001\ntitle: A wallet\nstatus: ready\nworkflow: quick\n---\n/);
+  assert.match(git(root, ['log', '-1', '--format=%b']), /Small: built with the quick workflow/);
+
+  writeFileSync(item, '---\nid: B-0001\ntitle: A wallet\nstatus: new\nrisk: high\n---\nSign with the gate key.\n');
+  git(root, ['commit', '-qam', 'risky']);
+  await clarify({ again: true, context: { runtime: () => rt } });
+  assert.doesNotMatch(readFileSync(item, 'utf8'), /workflow:/, 'a high-risk item keeps feature');
+});

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/analysis.schema.json",
-  "title": "The analyst's reading of a requirement",
+  "title": "The product owner's reading of a requirement",
   "type": "object",
   "additionalProperties": false,
   "required": ["understood", "questions", "assumptions"],
@@ -31,6 +31,10 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "What the team will take as given without asking, so the owner can object."
+    },
+    "size": {
+      "enum": ["small", "normal"],
+      "description": "small: one clear change to a few files with nothing left to decide (a fix, a copy change, a config value); built without acceptance tests written first. normal otherwise, and when unsure."
     }
   }
 }

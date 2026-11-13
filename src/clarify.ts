@@ -16,11 +16,13 @@ export interface Question {
   blocking: boolean;
 }
 
-/** What the analyst returns. */
+/** What the product owner returns. */
 export interface Analysis {
   understood: string;
   questions: Question[];
   assumptions: string[];
+  /** small: one clear change with nothing to decide, built through the quick workflow. */
+  size?: 'small' | 'normal';
 }
 
 export interface Clarification extends Analysis {
@@ -112,5 +114,5 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
     return { ...q, id: `Q${n}` };
   });
   const answers = Object.fromEntries(kept.map((q) => [q.id, previous!.answers[q.id]!]));
-  return { item: item.id, at: new Date().toISOString(), understood: a!.understood, questions: [...kept, ...fresh], assumptions: a!.assumptions, answers };
+  return { item: item.id, at: new Date().toISOString(), understood: a!.understood, questions: [...kept, ...fresh], assumptions: a!.assumptions, size: a!.size, answers };
 }
