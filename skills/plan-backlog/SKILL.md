@@ -18,6 +18,9 @@ depends_on: []
 Notes the spec does not say: where the code should go, what to reuse, what to leave alone.
 ```
 
+A small product may skip the spec: leave out `spec` and `criteria`, and list the criteria in the item itself, as
+`- AC-001: Given ..., when ..., then ...`. A feature several items share keeps its spec.
+
 Rules:
 
 - An item is small enough for one run: a few files, one coherent change, its criteria testable in that change.

@@ -11,7 +11,9 @@ import { openProduct, UsageError } from './commands/context.js';
 import { board, formatBoard } from './status.js';
 import { decideLesson, loadLessons } from './retro.js';
 import { discover } from './commands/discover.js';
-import { answer, clarify, questions, type ClarifyOutcome } from './commands/clarify.js';
+import { answer, clarify, questions } from './commands/clarify.js';
+import { clarified, decide } from './commands/decide.js';
+import { findProductRoot } from './paths.js';
 import { evaluate, formatEval } from './commands/eval.js';
 import { serve } from './commands/serve.js';
 import { sync } from './commands/sync.js';
@@ -23,48 +25,46 @@ import { validateProduct } from './commands/validate.js';
 
 const HELP = `asf ${version}: agentic software factory
 
-Usage:
+Every day:
+  asf                               the board: what each item and the team are doing, and every
+                                    decision waiting for you, oldest first (--json for scripts)
+  asf decide <id> <decision>        give a decision:
+                                      asf decide B-0001 approve            a plan, or a change in review
+                                      asf decide B-0001 reject <reason>    send it back with feedback
+                                      asf decide B-0001 retry              let a blocked item run again
+                                      asf decide B-0001 Q1 <answer>        answer the product owner
+                                      asf decide B-0001 accept             take every recommendation left
+                                      asf decide L-1 accept|reject         a lesson from a retro
+  asf run [--item <id>] [--all]     build the next ready item now (or one, or all)
+  asf run --watch [--workers <n>] [--interval <s>] [--once]
+                                    keep working unattended: intake, questions, builds, n at a
+                                    time; Ctrl-C stops after the items in progress
+
+Setting up:
   asf init [dir] [--name <name>]    create a product skeleton and register it
-  asf discover                      plan with the planner: brief, specs, backlog
-  asf validate                      check settings, policy, backlog and spec links
+  asf discover                      plan with the product owner: brief, specs, backlog
+  asf validate                      check settings, policy, workflows, backlog and spec links
   asf clarify [--item <id>] [--again]
-                                    the analyst reads new items and asks what it needs to know
-  asf questions                     open questions, with options and the team's recommendation
-  asf answer <id> <Q> <answer>      answer one question; with --accept instead of <Q> <answer>,
-                                    take the recommendation for every question left
+                                    the product owner reads new items and asks what it must know
   asf sync                          with a tracker: take in new tickets, post questions and
                                     results, apply the owner's answers and decisions
-  asf run [--item <id>] [--all]     build the next ready item (or one, or all)
-  asf serve [--workers <n>] [--interval <s>] [--once]
-                                    work unattended: intake, questions, builds, n at a time;
-                                    Ctrl-C stops after the items in progress
-  asf status [--json]               the board: what each item is doing, what the team is doing,
-                                    and every decision waiting for you, oldest first
-  asf show <id>                     where an item's work is and why it stopped
-  asf approve <id>                  approve a plan, or merge an item in review (into the
-                                    integration branch when there is one)
+
+Shipping:
   asf release [--dry]               merge the integration branch into the base branch
-  asf reject <id> <reason>          send an item in review back with feedback
-  asf retry <id>                    let a blocked item run again
-  asf lessons                       lessons the retros proposed, and what became of them
-  asf lesson <id> accept|reject     accept a lesson (a check becomes a backlog item, a doc goes
-                                    into the project memory) or reject it
-  asf report [--date YYYY-MM-DD]    daily report
+
+More:
+  asf show <id>                     where an item's work is and why it stopped
+  asf report [--date YYYY-MM-DD]    daily report, with tokens per step
   asf projects                      products registered on this machine
   asf eval [--case <id>] [--suite regression|capability] [--trials <k>]
            [--cases <dir>] [--out <file>] [--keep] [--reference]
            [--workflow <name|file>] [--without <step,...>]
                                     build the eval cases and score them against hidden tests,
                                     k times each for pass^k; --reference checks the cases with
-                                    their own solutions; --without leaves workflow steps out,
-                                    to measure what each is worth
-`;
+                                    their own solutions; --without leaves workflow steps out
 
-function clarified(o: ClarifyOutcome): string {
-  if (o.ready) return `${o.id} is ready to build`;
-  if (o.open) return `${o.id}: ${o.open} blocking question(s) open; see \`asf questions\``;
-  return `${o.id}: clear, but not made ready: ${o.note}`;
-}
+Older names, still accepted: status, serve, approve, reject, retry, answer, questions, lessons, lesson.
+`;
 
 async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -91,20 +91,44 @@ async function main(argv: string[]): Promise<number> {
       without: { type: 'string' },
       accept: { type: 'boolean' },
       json: { type: 'boolean' },
+      watch: { type: 'boolean' },
+      yes: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
   });
   const [cmd, ...args] = positionals;
   if (values.version) return console.log(version), 0;
-  if (values.help || !cmd || cmd === 'help') return console.log(HELP), 0;
+  if (values.help || cmd === 'help' || (!cmd && !findProductRoot(process.cwd()))) return console.log(HELP), 0;
   const need = (i: number, what: string) => {
     const v = args[i];
     if (!v) throw new UsageError(`missing ${what}`);
     return v;
   };
 
-  switch (cmd) {
+  const watch = async () => {
+    const stop = new AbortController();
+    process.once('SIGINT', () => {
+      console.log('stopping after the items in progress; Ctrl-C again to quit now (they resume on the next start)');
+      stop.abort();
+      process.once('SIGINT', () => process.exit(130));
+    });
+    process.once('SIGTERM', () => stop.abort());
+    const r = await serve({
+      workers: values.workers ? Number(values.workers) : undefined,
+      intervalSeconds: values.interval ? Number(values.interval) : undefined,
+      rounds: values.once ? 1 : undefined,
+      signal: stop.signal,
+      log: (m) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`),
+    });
+    console.log(`stopped after ${r.rounds} round(s), ${r.outcomes.length} item(s) finished`);
+    return 0;
+  };
+
+  switch (cmd ?? 'status') {
+    case 'decide':
+      console.log(decide(need(0, 'item or lesson id'), args.slice(1)));
+      return 0;
     case 'init': {
       const r = init(args[0] ?? '.', values.name);
       for (const f of r.created) console.log(`created ${f}`);
@@ -122,6 +146,7 @@ async function main(argv: string[]): Promise<number> {
       return r.errors.length ? 1 : 0;
     }
     case 'run': {
+      if (values.watch) return watch();
       const outcomes = await run({ item: values.item, all: values.all, log: (m) => console.log(m) });
       if (!outcomes.length) console.log('nothing is ready');
       return outcomes.some((o) => o.state === 'blocked') ? 2 : 0;
@@ -149,24 +174,8 @@ async function main(argv: string[]): Promise<number> {
       for (const o of out) console.log(clarified(o));
       return 0;
     }
-    case 'serve': {
-      const stop = new AbortController();
-      process.once('SIGINT', () => {
-        console.log('stopping after the items in progress; Ctrl-C again to quit now (they resume on the next start)');
-        stop.abort();
-        process.once('SIGINT', () => process.exit(130));
-      });
-      process.once('SIGTERM', () => stop.abort());
-      const r = await serve({
-        workers: values.workers ? Number(values.workers) : undefined,
-        intervalSeconds: values.interval ? Number(values.interval) : undefined,
-        rounds: values.once ? 1 : undefined,
-        signal: stop.signal,
-        log: (m) => console.log(`${new Date().toISOString().slice(11, 19)} ${m}`),
-      });
-      console.log(`stopped after ${r.rounds} round(s), ${r.outcomes.length} item(s) finished`);
-      return 0;
-    }
+    case 'serve':
+      return watch();
     case 'sync': {
       const out = await sync({ log: (m) => console.log(m) });
       if (!out.length) console.log('nothing to sync');

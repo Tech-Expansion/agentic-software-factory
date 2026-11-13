@@ -85,16 +85,16 @@ export function board(product: Product, now: Date = new Date()): Board {
       const c = loadClarification(paths.factory, item.id);
       const open = c ? openQuestions(c) : [];
       if (c && open.length)
-        decisions.push({ ...base, kind: 'answer', since: c.at, what: `${open.length} question(s): ${open.map((q) => q.id).join(', ')}`, how: reply(item.tracker, '"Q1: <answer>" or "/accept"', `asf questions, then asf answer ${item.id} <Q> <answer>`) });
+        decisions.push({ ...base, kind: 'answer', since: c.at, what: `${open.length} question(s): ${open.map((q) => q.id).join(', ')}`, how: reply(item.tracker, '"Q1: <answer>" or "/accept"', `asf decide ${item.id} <Q> <answer>, or asf decide ${item.id} accept`) });
       continue;
     }
     if (!st) continue;
     if (st.state === 'plan-review')
-      decisions.push({ ...base, kind: 'plan', since: st.updated_at, what: 'approve the plan of a high-risk item', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `asf show ${item.id}, then asf approve ${item.id}`) });
+      decisions.push({ ...base, kind: 'plan', since: st.updated_at, what: 'approve the plan of a high-risk item', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `asf show ${item.id}, then asf decide ${item.id} approve`) });
     else if (st.state === 'review')
-      decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `review the change; it touches ${st.flags.join(', ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.integration_branch ?? project.base_branch ?? 'main'}...${st.branch}, then asf approve ${item.id}`) });
+      decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `review the change; it touches ${st.flags.join(', ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.integration_branch ?? project.base_branch ?? 'main'}...${st.branch}, then asf decide ${item.id} approve`) });
     else if (st.state === 'blocked')
-      decisions.push({ ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf retry ${item.id}`) });
+      decisions.push({ ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf decide ${item.id} retry`) });
   }
   const merged = Object.entries(state.items).filter(([, v]) => v.state === 'merged');
   if (merged.length) {
@@ -110,7 +110,7 @@ export function board(product: Product, now: Date = new Date()): Board {
       kind: 'lesson',
       since: l.at,
       what: `a ${l.scope} ${l.kind}${seen}${l.note ? `; ${l.note}` : ''}: ${l.proposal}`,
-      how: digest ? `reply on ${digest}: "/lesson ${l.id} accept" or "/lesson ${l.id} reject"` : `asf lesson ${l.id} accept, or reject`,
+      how: digest ? `reply on ${digest}: "/lesson ${l.id} accept" or "/lesson ${l.id} reject"` : `asf decide ${l.id} accept, or reject`,
     });
   }
   decisions.sort((a, b) => a.since.localeCompare(b.since));
@@ -135,9 +135,9 @@ export function formatBoard(b: Board, now: Date = new Date()): string {
   if (b.team) {
     const paused = b.team.paused_until && new Date(b.team.paused_until) > now ? `, paused by a usage limit until ${b.team.paused_until}` : '';
     const busy = b.team.running.length ? `building ${b.team.running.join(', ')}` : 'idle';
-    out.push(`Team: asf serve (pid ${b.team.pid}), ${busy} (${b.team.running.length}/${b.team.workers}), last round ${ago(b.team.at, now)} ago${paused}`);
+    out.push(`Team: asf run --watch (pid ${b.team.pid}), ${busy} (${b.team.running.length}/${b.team.workers}), last round ${ago(b.team.at, now)} ago${paused}`);
   } else {
-    out.push('Team: not running; `asf serve` starts it');
+    out.push('Team: not running; `asf run --watch` starts it');
   }
   out.push('', ...ORDER.filter((c) => b.columns[c]?.length).map((c) => `${c.padEnd(9)} ${b.columns[c]!.join(' ')}`), '');
   out.push(`## Waiting for you (${b.decisions.length})`, '');

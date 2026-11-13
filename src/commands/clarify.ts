@@ -29,8 +29,8 @@ function makeReady(product: Product, item: BacklogItem, c: Clarification): Clari
   const { root } = product.paths;
   const base = product.project.base_branch ?? 'main';
   const out = { id: item.id, open: 0, ready: false };
-  if (currentBranch(root) !== base) return { ...out, note: `check out ${base} and run \`asf answer ${item.id} --accept\` to make it ready` };
-  if (!isClean(root)) return { ...out, note: `commit or stash your changes, then run \`asf answer ${item.id} --accept\` to make it ready` };
+  if (currentBranch(root) !== base) return { ...out, note: `check out ${base} and run \`asf decide ${item.id} accept\` to make it ready` };
+  if (!isClean(root)) return { ...out, note: `commit or stash your changes, then run \`asf decide ${item.id} accept\` to make it ready` };
   const text = readFileSync(item.file, 'utf8');
   appendFileSync(item.file, `${text.endsWith('\n') ? '' : '\n'}\n${decisionsSection(c)}\n`);
   setStatus(item.file, 'ready');
@@ -68,7 +68,7 @@ export async function clarify(opts: ClarifyOptions = {}): Promise<ClarifyOutcome
     if (item.status !== 'new') throw new UsageError(`${item.id} is ${item.status}; only new items are clarified`);
     const previous = loadClarification(product.paths.factory, item.id);
     if (previous && !opts.again) {
-      outcomes.push({ id: item.id, open: openQuestions(previous).length, ready: false, note: 'already asked; answer with `asf answer`, or use --again' });
+      outcomes.push({ id: item.id, open: openQuestions(previous).length, ready: false, note: 'already asked; answer with `asf decide`, or use --again' });
       continue;
     }
     log(`${item.id}: asking the product owner`);

@@ -54,7 +54,7 @@ export function approve(id: string, root?: string): { merged: string; into: stri
     git(target, ['merge', '--abort'], true);
     // The work is started again from the target on retry: a fresh worktree, new tests, the approved plan kept.
     removeWorktree(paths.root, st.worktree, st.branch);
-    const reason = `does not merge cleanly into ${integration ?? base}; \`asf retry ${id}\` builds it again on top of it:\n${(merged.stdout + merged.stderr).trim()}`;
+    const reason = `does not merge cleanly into ${integration ?? base}; \`asf decide ${id} retry\` builds it again on top of it:\n${(merged.stdout + merged.stderr).trim()}`;
     state.items[id] = { ...st, state: 'blocked', reason, tests: undefined, feedback: undefined, updated_at: new Date().toISOString() };
     saveState(paths.state, state);
     throw new UsageError(`${id} ${reason}`);
@@ -125,7 +125,7 @@ export function describe(id: string): string {
     `branch ${st.branch}, worktree ${relative(process.cwd(), st.worktree) || '.'}`,
     `diff: git diff ${base}...${st.branch}`,
     ...(st.flags?.length ? [`needs your attention: ${st.flags.join(', ')}`] : []),
-    ...(st.state === 'plan-review' && st.plan ? ['', 'Plan, waiting for `asf approve` or `asf reject`:', '', st.plan.text] : []),
+    ...(st.state === 'plan-review' && st.plan ? ['', `Plan, waiting for \`asf decide ${id} approve\` or \`asf decide ${id} reject <reason>\`:`, '', st.plan.text] : []),
     ...(st.feedback ? ['', st.feedback] : []),
   ].join('\n');
 }

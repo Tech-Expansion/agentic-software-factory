@@ -41,8 +41,9 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
   const ids = new Set(items.map((i) => i.id));
   for (const item of items) {
     for (const d of item.depends_on ?? []) if (!ids.has(d)) errors.push(`${item.id}: depends on unknown ${d}`);
+    // A spec is optional: a small product lists the criteria in the item itself, as "- AC-001: ...".
     if (!item.spec) {
-      if (item.status === 'ready') warnings.push(`${item.id}: ready without a spec`);
+      if (item.status === 'ready' && !/\bAC-\d{3}\b/.test(item.body)) warnings.push(`${item.id}: ready without acceptance criteria (in a spec, or in the item as "- AC-001: ...")`);
       continue;
     }
     const specFile = join(root, item.spec);

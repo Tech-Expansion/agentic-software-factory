@@ -135,3 +135,15 @@ test('a small item is built with the quick workflow, unless it is high risk', as
   await clarify({ again: true, context: { runtime: () => rt } });
   assert.doesNotMatch(readFileSync(item, 'utf8'), /workflow:/, 'a high-risk item keeps feature');
 });
+
+test('asf decide answers, accepts and refuses what it does not know', async () => {
+  const { decide } = await import('./commands/decide.js');
+  const rt = analyst({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] });
+  await clarify({ context: { runtime: () => rt } });
+  assert.match(decide('B-0001', ['Q1', 'mobile,', 'iOS', 'first']), /1 blocking question\(s\) open/);
+  assert.match(decide('B-0001', ['accept']), /B-0001 is ready to build/);
+  assert.match(readFileSync(item, 'utf8'), /Q1: which platform\? mobile, iOS first/);
+  assert.throws(() => decide('B-0001', ['maybe']), /asf decide <item> approve/);
+  assert.throws(() => decide('X-1', ['accept']), /not an item \(B-0001\) or a lesson/);
+  assert.throws(() => decide('L-9', ['accept']), /no lesson L-9/);
+});
