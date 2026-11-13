@@ -88,6 +88,16 @@
       "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "The workflow items run unless they name their own; feature when unset. The product's .factory/workflows/<name>.yaml replaces the factory's."
     },
+    "paths": {
+      "type": "object",
+      "description": "Named path lists that a workflow step's `when.touches` can use, for example ui: [\"src/ui/**\"] to bring in the UX designer's review.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
     "opt_ins": {
       "type": "object",
       "additionalProperties": false,

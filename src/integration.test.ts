@@ -136,7 +136,8 @@ test('a quick change to a sensitive path is thrown away and built again, tests f
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
   assert.deepEqual(out?.flags, ['keys/sign.txt']);
-  assert.deepEqual(rt.calls.map((c) => (c.writeOnly ? 'tests' : c.access)), ['write', 'tests', 'write', 'read'], 'the quick build was not verified; feature ran from its tests step');
+  assert.deepEqual(rt.calls.map((c) => (c.writeOnly ? 'tests' : c.access)), ['write', 'tests', 'write', 'read', 'read'], 'the quick build was not verified; feature ran from its tests step');
+  assert.match(rt.calls.at(-1)!.systemPrompt, /You are the security reviewer/, 'a change to a sensitive path brings in the security reviewer');
   const escalated = readEvents(join(root, '.factory/runs')).find((e) => e.outcome === 'escalated');
   assert.match(escalated?.detail ?? '', /quick touched keys\/sign\.txt; built again through feature/);
 });
@@ -179,4 +180,19 @@ test('a product feature workflow without tests blocks a high-risk item instead o
   assert.equal(out?.state, 'blocked');
   assert.match(out?.reason ?? '', /no tests step, and a high-risk item gets acceptance tests first/);
   assert.equal(rt.calls.length, 0);
+});
+
+test('specialists come in only when the change calls for them', async () => {
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'paths:\n  ui: ["ui/**"]\n');
+  item(1, '', 'ui/home.txt');
+  item(2, '', 'f2.txt');
+  commitItems();
+  const reviewers = (rt: ReturnType<typeof team>) => rt.calls.filter((c) => c.access === 'read').map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
+  const ui = team();
+  await run({ item: 'B-0001', context: { runtime: () => ui } });
+  assert.deepEqual(reviewers(ui), ['QA', 'the UX designer']);
+  const plain = team();
+  await run({ item: 'B-0002', context: { runtime: () => plain } });
+  assert.deepEqual(reviewers(plain), ['QA'], 'no specialist for a plain change');
 });

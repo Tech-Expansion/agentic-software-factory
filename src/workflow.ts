@@ -15,6 +15,12 @@ export interface AgentStep {
    * commits them, and later steps cannot change them.
    */
   scope?: 'tests';
+  /**
+   * Runs only when the change calls for it: a reviewer brought in like a specialist. `touches` holds globs, or names
+   * of path lists: `sensitive` and `approval` from the policy, or any list under `paths:` in project.yaml. The step
+   * runs if a changed file matches, or if the item has the given `risk`. Read-only steps only.
+   */
+  when?: { touches?: string[]; risk?: 'high' };
 }
 
 export interface ChecksStep {
@@ -48,6 +54,7 @@ export function loadWorkflow(name: string, without: string[] = [], local?: strin
   for (const s of wf.steps as Step[]) {
     if (s.kind !== 'agent' && s.kind !== 'checks') throw new Error(`workflow ${name}: unknown step kind in ${(s as Step).id}`);
     if (s.kind === 'agent' && (!s.role || !Array.isArray(s.skills))) throw new Error(`workflow ${name}: ${s.id} needs role and skills`);
+    if (s.kind === 'agent' && s.when && s.access !== 'read') throw new Error(`workflow ${name}: ${s.id} has \`when\`, which only a read-only step may have`);
     if (s.kind === 'agent' && s.scope === 'tests' && (s !== wf.steps[0] || s.access !== 'write')) {
       throw new Error(`workflow ${name}: a tests step must be the first step, with write access`);
     }

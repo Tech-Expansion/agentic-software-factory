@@ -26,6 +26,8 @@ export interface ProjectConfig {
   commands: { setup?: string[]; check: string[] };
   /** The workflow items run unless they name another; feature when unset. */
   workflow?: string;
+  /** Named path lists a workflow step's `when.touches` can use, for example `ui` for the UX designer's review. */
+  paths?: Record<string, string[]>;
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
   tracker?: TrackerConfig;
 }

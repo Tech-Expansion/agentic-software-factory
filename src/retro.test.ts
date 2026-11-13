@@ -153,7 +153,7 @@ test('the owner decides lessons on the digest ticket', async () => {
 });
 
 test('eval ablations: a workflow without a step, and a step that does not exist', () => {
-  assert.deepEqual(loadWorkflow('feature', ['tests']).steps.map((s) => s.id), ['build', 'check', 'verify']);
+  assert.deepEqual(loadWorkflow('feature', ['tests']).steps.map((s) => s.id), ['build', 'check', 'verify', 'security', 'ux']);
   assert.throws(() => loadWorkflow('feature', ['lint']), /no step lint/);
   assert.throws(() => loadWorkflow('feature', ['build', 'tests']), /must start with an agent step with write access|first step must be/);
 });

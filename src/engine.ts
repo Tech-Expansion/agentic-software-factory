@@ -85,6 +85,16 @@ function testedFeature(paths: ProductPaths, who: string): Workflow {
   return wf;
 }
 
+/** Whether a step with `when` applies to this change: a changed file in one of its paths, or the item's risk. */
+export function stepApplies(step: AgentStep, item: BacklogItem, changed: string[], policy: Policy, project: ProjectConfig): boolean {
+  const w = step.when;
+  if (!w) return true;
+  if (w.risk && item.risk === w.risk) return true;
+  const named: Record<string, string[]> = { ...project.paths, sensitive: policy.sensitive_paths, approval: policy.approval_paths };
+  const globs = (w.touches ?? []).flatMap((t) => (/[/*.]/.test(t) ? [t] : (named[t] ?? [])));
+  return globs.length > 0 && changed.some((f) => matchesAny(f, globs));
+}
+
 /** The branch items start from: the integration branch, created from the base branch the first time. */
 export function integrationBase(root: string, project: ProjectConfig): string {
   const base = project.base_branch ?? 'main';
@@ -313,6 +323,10 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
         continue;
       }
 
+      if (step.when && !stepApplies(step, item, stageAndList(worktree, base), policy, project)) {
+        log(`${item.id} attempt ${attempt} ${step.id}: not needed for this change`);
+        continue;
+      }
       if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
       const diff = step.access === 'read' ? (stageAndList(worktree, base), stagedDiff(worktree, base, 60_000)) : undefined;
       const { result, runtimeName } = await callAgent(step, attempt, {

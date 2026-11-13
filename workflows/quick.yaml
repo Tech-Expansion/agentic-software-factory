@@ -16,3 +16,17 @@ steps:
     skills: [verify-against-criteria]
     access: read
     output: verdict
+  - id: security
+    kind: agent
+    role: security-reviewer
+    skills: [review-security]
+    access: read
+    output: verdict
+    when: { touches: [sensitive, approval], risk: high }
+  - id: ux
+    kind: agent
+    role: ux-designer
+    skills: [review-ux]
+    access: read
+    output: verdict
+    when: { touches: [ui] }
