@@ -27,7 +27,7 @@ const acceptance: Script = () => ({ write: { 'acceptance.test.js': "test('AC-001
  * A runtime that follows a script instead of calling a model. The tests step (the call limited to test files) follows
  * its own script and is kept out of `calls`, so the developer and QA calls keep their numbers.
  */
-function fake(script: Script, tester: Script = acceptance): Runtime & { calls: AgentCall[]; testerCalls: AgentCall[] } {
+function fake(script: Script, qa: Script = acceptance): Runtime & { calls: AgentCall[]; testerCalls: AgentCall[] } {
   const calls: AgentCall[] = [];
   const testerCalls: AgentCall[] = [];
   return {
@@ -37,7 +37,7 @@ function fake(script: Script, tester: Script = acceptance): Runtime & { calls: A
     async call(c) {
       const own = c.writeOnly ? testerCalls : calls;
       own.push(c);
-      const r = (c.writeOnly ? tester : script)(c, own.length);
+      const r = (c.writeOnly ? qa : script)(c, own.length);
       for (const [f, text] of Object.entries(r.write ?? {})) {
         if (text === undefined) continue;
         mkdirSync(join(c.cwd, f, '..'), { recursive: true });
