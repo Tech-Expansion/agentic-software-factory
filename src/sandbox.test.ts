@@ -7,7 +7,7 @@ import { runChecks } from './checks.js';
 import { loadDefaultPolicy } from './config.js';
 import { git } from './git.js';
 import { findSecrets, testTampering } from './integrity.js';
-import { claudeArgs, parseClaudeOutput } from './runtimes/claude.js';
+import { claudeArgs, claudeEnv, parseClaudeOutput } from './runtimes/claude.js';
 import { codexEnv } from './runtimes/codex.js';
 import type { AgentCall } from './runtimes/types.js';
 import { claudeSandbox, hasSrt, scrubEnv, srtSettings, toolchainEnv } from './sandbox.js';
@@ -100,6 +100,17 @@ test('claude adapter: Bash runs in a sandbox that fails closed, and Read cannot 
     assert.equal(settings.sandbox.network.allowLocalBinding, false, 'loopback stays closed unless a product needs it');
     assert.match(args[args.indexOf('--disallowedTools') + 1]!, /Read\(~\/\.claude\/\*\*\)/);
     assert.equal(args[args.indexOf('--output-format') + 1], 'stream-json');
+  } finally {
+    if (saved !== undefined) process.env.ASF_UNSAFE_NO_SANDBOX = saved;
+  }
+});
+
+test('claude adapter: the toolchain env overrides what the agent inherits, since its settings env does not', () => {
+  const saved = process.env.ASF_UNSAFE_NO_SANDBOX;
+  delete process.env.ASF_UNSAFE_NO_SANDBOX;
+  try {
+    assert.equal(claudeEnv(call(), { NODE_USE_SYSTEM_CA: '1', PATH: '/bin' }).NODE_USE_SYSTEM_CA, '0');
+    assert.equal(claudeEnv(call({ sandbox: undefined }), { NODE_USE_SYSTEM_CA: '1' }).NODE_USE_SYSTEM_CA, '1');
   } finally {
     if (saved !== undefined) process.env.ASF_UNSAFE_NO_SANDBOX = saved;
   }

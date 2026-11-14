@@ -20,6 +20,15 @@ interface ClaudeJson {
   };
 }
 
+/**
+ * The environment Claude Code starts with. The `env` block of its settings does not override variables it inherits,
+ * so a sandboxed agent's commands would still see, say, NODE_USE_SYSTEM_CA=1 from the operator's shell; the
+ * toolchain variables are set on the process itself as well.
+ */
+export function claudeEnv(c: AgentCall, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return c.sandbox && !sandboxOff() ? { ...env, ...toolchainEnv(c.sandbox) } : env;
+}
+
 /** Builds the argument list. Exported for tests; see ADR 0003 for why each flag is there. */
 export function claudeArgs(c: AgentCall): string[] {
   const allowed = [...READ_TOOLS];
@@ -111,7 +120,7 @@ export const claudeCode: Runtime = {
   name: 'claude-code',
   async call(c) {
     if (c.sandbox && !sandboxOff()) prepareWritable(c.sandbox);
-    const r = await exec('claude', claudeArgs(c), { cwd: c.cwd, input: c.prompt, timeoutMs: c.timeoutMs ?? 30 * 60_000 });
+    const r = await exec('claude', claudeArgs(c), { cwd: c.cwd, input: c.prompt, timeoutMs: c.timeoutMs ?? 30 * 60_000, env: claudeEnv(c) });
     if (r.timedOut) return { ok: false, text: '', tokens: noTokens(), durationMs: r.durationMs, error: 'timed out' };
     const parsed = { ...parseClaudeOutput(r.stdout), transcript: r.stdout };
     if (r.code !== 0 && parsed.ok) {
