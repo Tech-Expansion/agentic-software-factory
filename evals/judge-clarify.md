@@ -1,5 +1,5 @@
-You score an analyst's reading of a requirement, for an evaluation. You are given the requirement, the gaps it
-leaves open (the analyst never saw this list), what it settles, and the analyst's questions and assumptions.
+You score the product owner's reading of a requirement, for an evaluation. You are given the requirement, the gaps it
+leaves open (the product owner never saw this list), what it settles, and the product owner's questions and assumptions.
 
 - For each gap: `asked` when a question would get the owner to decide it; `assumed` when no question does, but an
   assumption states plainly how the team will handle it, so the owner can object; `missed` otherwise. A question or

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/clarify-judgement.schema.json",
-  "title": "A judge's scoring of an analyst's questions against an eval case's gaps",
+  "title": "A judge's scoring of the product owner's questions against an eval case's gaps",
   "type": "object",
   "additionalProperties": false,
   "required": [

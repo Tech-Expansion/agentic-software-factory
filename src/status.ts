@@ -9,7 +9,7 @@ import { day, readEvents } from './runlog.js';
 import { loadLessons } from './retro.js';
 import { loadState, type ItemState } from './state.js';
 
-/** What `asf serve` writes each round, so anyone can see what the team is doing without asking it. */
+/** What `asf run --watch` writes each round, so anyone can see what the team is doing without asking it. */
 export interface Heartbeat {
   pid: number;
   started: string;
@@ -20,7 +20,7 @@ export interface Heartbeat {
   paused_until?: string;
 }
 
-const beatFile = (factory: string) => join(factory, 'serve.json');
+const beatFile = (factory: string) => join(factory, 'watch.json');
 export const writeHeartbeat = (factory: string, h: Heartbeat) => writeFileSync(beatFile(factory), JSON.stringify(h, null, 2) + '\n');
 export const clearHeartbeat = (factory: string) => rmSync(beatFile(factory), { force: true });
 
@@ -52,6 +52,8 @@ export interface Board {
   decisions: Decision[];
   /** Specialists the team suggests turning on; not a decision anything waits for. */
   suggestions: string[];
+  /** What the tech lead decided for you in the last 7 days, which you can reverse. */
+  decided: string[];
   tokens: { today: number; week: number };
 }
 
@@ -88,7 +90,7 @@ export function board(product: Product, now: Date = new Date()): Board {
       const c = loadClarification(paths.factory, item.id);
       const open = c ? openQuestions(c) : [];
       if (c && open.length)
-        decisions.push({ ...base, kind: 'answer', since: c.at, what: `${open.length} question(s): ${open.map((q) => q.id).join(', ')}`, how: reply(item.tracker, '"Q1: <answer>" or "/accept"', `asf decide ${item.id} <Q> <answer>, or asf decide ${item.id} accept`) });
+        decisions.push({ ...base, kind: 'answer', since: c.at, what: `${open.length} question(s): ${open.map((q) => q.id).join(', ')}`, how: reply(item.tracker, '"Q1: <answer>" or "/accept"', `asf show ${item.id}, then asf decide ${item.id} <Q> <answer>, or asf decide ${item.id} accept`) });
       continue;
     }
     if (!st) continue;
@@ -121,8 +123,12 @@ export function board(product: Product, now: Date = new Date()): Board {
   const agentTokens = (date?: string) => readEvents(paths.runs, date).filter((e) => e.kind === 'agent').reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
   let week = 0;
   for (let d = 0; d < 7; d++) week += agentTokens(day(new Date(now.getTime() - d * 86_400_000).toISOString()));
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const decided = loadLessons(paths.factory)
+    .filter((l) => l.decided_by === 'tech-lead' && (l.decided_at ?? '') >= weekAgo)
+    .map((l) => `${l.id} ${l.status}: ${l.title}${l.reason ? ` (${l.reason})` : ''}; asf decide ${l.id} ${l.status === 'accepted' ? 'reject' : 'accept'} reverses it`);
   const suggestions = suggestedSpecialists(project, policy).map((s) => `${s.role}, because ${s.why}: add it to specialists: in .factory/project.yaml`);
-  return { product: project.name, team: readHeartbeat(paths.factory), columns, decisions, suggestions, tokens: { today: agentTokens(day(now.toISOString())), week } };
+  return { product: project.name, team: readHeartbeat(paths.factory), columns, decisions, suggestions, decided, tokens: { today: agentTokens(day(now.toISOString())), week } };
 }
 
 export const fmtTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
@@ -147,6 +153,7 @@ export function formatBoard(b: Board, now: Date = new Date()): string {
   out.push(`## Waiting for you (${b.decisions.length})`, '');
   if (!b.decisions.length) out.push('- nothing');
   for (const d of b.decisions) out.push(`- ${d.item} ${d.title} [${d.kind}, ${ago(d.since, now)}]: ${d.what}`, `  ${d.how}`);
+  if (b.decided.length) out.push('', '## Decided by the team this week', '', ...b.decided.map((s) => `- ${s}`));
   if (b.suggestions.length) out.push('', '## Suggested by the team', '', ...b.suggestions.map((s) => `- ${s}`));
   out.push('', `Tokens: ${fmtTokens(b.tokens.today)} today, ${fmtTokens(b.tokens.week)} in the last 7 days`);
   return out.join('\n');

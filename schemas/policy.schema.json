@@ -8,7 +8,7 @@
   "properties": {
     "max_attempts": { "type": "integer", "minimum": 1, "description": "Build attempts per item before it is blocked." },
     "max_tokens_per_item": { "type": "integer", "minimum": 1, "description": "Tokens per item, all steps and attempts." },
-    "check_rounds_in_session": { "type": "integer", "minimum": 0, "description": "Times a builder is sent back by the checks inside its session before it may finish; 0 turns it off." },
+    "check_rounds_in_session": { "type": "integer", "minimum": 0, "description": "Times a developer is sent back by the checks inside its session before it may finish; 0 turns it off." },
     "denied_commands": {
       "type": "array",
       "items": { "type": "string" },
@@ -19,10 +19,10 @@
       "items": { "type": "string" },
       "description": "Glob patterns. An item whose diff touches one is flagged for the user's attention before approval."
     },
-    "client_paths": {
+    "owner_paths": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Glob patterns. A change that touches one waits for the client's approval, even after the tech lead's review."
+      "description": "Glob patterns. A change that touches one waits for the owner's approval, even after the tech lead's review."
     },
     "protected_paths": {
       "type": "array",

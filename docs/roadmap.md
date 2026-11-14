@@ -1,7 +1,7 @@
 # Roadmap to 1.0
 
-Where the factory is going after 0.1, and how we will know it works. Each milestone ends with exit criteria that
-are measured, not felt. Hard-to-undo decisions along the way get an ADR.
+How we will know the factory works, what is built, and what is left. Bars are measured, not felt. Hard-to-undo
+decisions get an ADR.
 
 ## What "works" means
 
@@ -9,7 +9,8 @@ are measured, not felt. Hard-to-undo decisions along the way get an ADR.
 
 - No code is written for an item that is not Ready.
 - No policy breach: protected paths, denied commands, budgets, locked acceptance tests.
-- Nothing reaches the base branch without the approval the policy asks for. Sensitive paths always need a person.
+- Nothing reaches the base branch without the owner's release. A change to `owner_paths`, or one a reviewer
+  escalates, waits for the owner however it was reviewed.
 - No secret leaves the machine through the factory: agent commands and checks run sandboxed, without secrets in their
   environment and without network access beyond an allowlist.
 
@@ -17,144 +18,61 @@ are measured, not felt. Hard-to-undo decisions along the way get an ADR.
 
 | Capability | Measured by | Bar |
 | --- | --- | --- |
-| Understanding a requirement | Eval tickets with planted gaps and conflicts: share of real gaps the analyst asks about, questions about what the ticket already says | ≥95% of gaps asked, ≤1 needless question per ticket |
+| Understanding a requirement | Eval tickets with planted gaps: share of gaps the product owner asks about, questions about what the ticket already says | ≥95% of gaps asked, ≤1 needless question per ticket |
 | Delivering, reliably | Hidden acceptance tests written by a person, never shown to the agents, each case run k times | pass^3 ≥95% on the regression suite; ≥95 of 100 real items accepted on first delivery |
+| Asking the owner only what is theirs | Real items: escalations and plan decisions the owner would have made the same way without being asked | ≤1 needless question per 10 items, no missed one |
 | Running unattended | A soak run on an always-on host | 14 days, no item stuck without the owner being told, rate limits recovered from without help |
 | Token use | The run log | 0 tokens while there is no work; tokens per item do not regress between versions |
 
-pass^k is the share of cases that pass in all k trials. It measures what the owner needs, consistency, where a single
-run only shows that success is possible.
+pass^k is the share of cases that pass in all k trials: consistency, which is what the owner needs.
 
-95% is claimed for small-to-medium items in supported stacks. Work that touches keys, signing or money is not built
-unattended: the factory clarifies, plans and tests it, and a person approves the plan and every change before it
-merges.
+## Principles we took from others
 
-## Decisions taken (2026-11-07)
+From Anthropic's harness and eval posts, OpenAI's harness engineering, Stripe's Minions, Cursor's planner and
+workers, Cognition on multi-agents, Spotify's verification loops, Every's compound engineering, Kent Beck on agents
+and tests, Simon Willison's lethal trifecta, Dex Horthy and Harper Reed on planning.
 
-1. **Tracker access through the vendor's own CLI.** Jira through Atlassian's `acli`, signed in by the user, like the
-   agent CLIs in [ADR 0001](adr/0001-run-inside-the-users-own-agent-cli.md). On a headless host the user may sign
-   Claude Code in with a long-lived token from `claude setup-token`; the runner only inherits the environment and
-   never reads it.
-2. **An always-on Linux VM ("server 2"), reached over SSH,** hosts `asf serve` for unattended runs. Development and
-   interactive sessions stay on the owner's machine.
-3. **Merge autonomy.** Items that pass checks and review merge into an integration branch on their own. The product
-   owner approves releases from it into the base branch in batches. Items that touch sensitive paths are approved one
-   by one.
-4. **First product: TEX-1, a free Cardano wallet with multi-sig and a person-held gate key.** First scope: receive
-   and send ADA and native tokens, balances and assets, and m-of-n multi-sig (create, propose, co-sign, submit) with a
-   gate key. Constraints the factory enforces:
-   - Preprod only. Agents may generate preprod test keys for tests. No mainnet key, seed or gate key is ever on the
-     host, in the repo or in CI. Funding test wallets from the faucet is done by the owner.
-   - Key handling, signing and transaction building are sensitive paths: the plan and every change need the owner's
-     approval.
-   - Moving the real funds (TEX-1's first acceptance criterion) is done by the owner by hand, outside the factory.
-   - Open product decisions in TEX-1, the platform first, are asked by the analyst, not assumed.
-   - Work items live in the Jira AI project and link back to TEX-1, which stays the owner's epic.
+1. **Cut one leg of the lethal trifecta.** Private data, untrusted content and a way out together turn prompt
+   injection into exfiltration, so agents run sandboxed and unattended ones never browse the web.
+2. **Evals that still have signal.** A capability suite that starts low, a regression suite near 100%, pass^k over
+   several trials, transcripts kept for error analysis.
+3. **Whoever writes the code does not write its acceptance tests**, and cannot change, skip or delete them.
+4. **The owner decides outcomes, not diffs.** The tech lead plans risky work and reviews every change; the owner is
+   asked about scope, cost and what cannot be undone.
+5. **Lessons become checks**, not longer prompts, and steps the evals show no longer help are removed.
+6. **Verify like a user.** Products with a UI get end-to-end checks QA can run.
+7. **Orchestration in code.** Parallel work only on items that do not touch the same area; decisions are short
+   commands that say who decided.
+8. **Fewer round trips.** Checks run inside the developer's session before it may finish.
 
-## What we took from others (2026-11-07)
+## Where we are (2026-11-14)
 
-Sources and why each point is here: Anthropic's harness and eval posts, OpenAI's harness engineering, Stripe's
-Minions, Cursor's planner and workers, Cognition on multi-agents, Spotify's verification loops, Every's compound
-engineering, Kent Beck on agents and tests, Simon Willison's lethal trifecta, Dex Horthy and Harper Reed on planning.
+Built and covered by tests with a fake runtime:
 
-1. **Cut one leg of the lethal trifecta.** Private data, untrusted content and a way out together make prompt
-   injection an exfiltration channel. Once tickets come from Jira all three are present, so sandboxing comes before
-   the tracker, not after it.
-2. **Evals that still have signal.** A capability suite that starts with a low pass rate, a regression suite that
-   stays near 100%, pass^k over several trials, and transcripts kept for error analysis.
-3. **Whoever writes the code does not write its acceptance tests.** Agents delete, skip or bend tests to make them
-   pass. A separate step writes tests from the criteria first, the builder cannot change them, and skipped or deleted
-   tests fail the item.
-4. **The owner reviews plans, not diffs.** A wrong line of research becomes many wrong lines of code. High-risk items
-   get a plan the owner approves before any code is written.
-5. **Lessons become checks.** A repeated mistake turns into a lint rule, a test or a scoped doc, not into a longer
-   prompt. Learning also removes steps that evals show no longer help: every step encodes an assumption about what the
-   model cannot do.
-6. **Verify like a user.** Products with a UI get end-to-end checks in a browser, which the verifier can run.
-7. **Planner and independent workers.** Parallel work only on items that do not touch the same area, no integrator
-   agent, orchestration in code. The owner decides with a short command in a comment, which is unambiguous and says
-   who decided, rather than by prose.
-8. **Fewer round trips.** Checks run inside the builder's session before it may finish, so a failure is fixed in the
-   same context, and the number of rounds stays capped.
+- Evals with hidden tests and pass^k; the sandbox; acceptance tests written first and locked (ADR 0004).
+- Intake and the Definition of Ready: the product owner scans the market in discovery, clarifies and sizes items.
+- Product overrides of roles, skills and workflows, and a quick workflow for small changes (ADR 0009).
+- A product team: product owner, developer, QA and tech lead on every item; security reviewer and UX designer as
+  opt-in specialists; DevOps for infrastructure, deployed by the owner (ADR 0010, 0011, 0012).
+- Unattended runs with `asf run --watch`, the board, an integration branch with batch releases (ADR 0006).
+- Retros whose lessons become checks, decided by the tech lead (ADR 0007, 0012).
+- Jira through `acli` (ADR 0005), not yet checked against the real `acli`.
 
-## Milestones
+Designed, not built: SRE (ADR 0011).
 
-Where we are (2026-11-14): M0 to M6 are built and covered by tests with a fake runtime; the Jira adapter is not yet
-checked against the real `acli`. M7 has not started. Products can add to roles and skills and bring their own
-workflows, and a quick workflow skips the tests written first for small changes (ADR 0009). The team is named after a product team's roles,
-with a DevOps engineer whose pipeline the owner deploys with `asf deploy` (ADR 0010, ADR 0011); SRE is designed, not
-built. The owner is the client: the tech lead reviews every change and decides plans and lessons, the security
-reviewer and the UX designer are specialists a product turns on, and only decisions with business consequences wait
-for the owner (ADR 0012).
+## Next
 
-### M0. Measure first
+### M7. Pilot
 
-`asf eval` runs a set of cases, each a small product with a backlog and hidden acceptance tests, and reports delivery
-rate with its confidence interval, pass^k over `--trials`, hard-gate breaches, attempts and tokens per case. Cases are
-tagged `regression` or `capability`. Agent transcripts are kept. `asf eval --reference` checks the cases themselves
-with their own solutions; CI runs it.
+One small new product, five to eight items, built with real models end to end.
 
-Exit: baselines for 0.1 under `evals/baselines/`, a capability suite the current version does not saturate.
+Exit: delivery rate, tokens per item and every question the owner was asked are recorded; what went wrong becomes
+eval cases or lessons; a new baseline under `evals/baselines/`.
 
-### M1. Safe and honest by default
+### M8. Soak
 
-Agent commands and the runner's checks run in a sandbox that fails closed: no network beyond the policy's allowlist,
-no reading of credentials, secrets removed from the environment. A tests step writes acceptance tests from the
-criteria before the builder starts; the builder cannot change them, and skipped or deleted tests send the item back.
-The verifier can run the product's end-to-end checks.
-
-Exit: every injection case is contained, a test-tampering case is caught, and the sandbox refuses to run unsandboxed.
-
-### M2. Intake and the Definition of Ready
-
-An `analyst` role reads a requirement and returns what it understood, the questions that block it with options and a
-recommended answer, and the assumptions it would make. An item that needs clarification never reaches a builder; only
-the owner's answers move it on. High-risk items get a plan that the owner approves before the build.
-
-Exit: on TEX-1 the analyst asks about each open decision (platform, gate structure, recovery path) and does not ask
-again about what the ticket settles. Clarify cases join the eval set.
-
-### M3. A configurable tracker
-
-A `Tracker` interface with a `local` adapter (today's `backlog/`) and a `jira` adapter over `acli`. Questions become
-comments with a `needs-po` label; the owner answers and decides in comments (`/approve`, `/reject`), because a comment
-says who wrote it and a status change does not ([ADR 0005](adr/0005-tracker-through-acli-decisions-by-owner-comments.md)).
-Only the configured owner account counts; everything else in a ticket is untrusted data. Jira holds tickets and the conversation; the repo
-holds specs, criteria and code.
-
-Exit: one ticket in the AI project goes from clarification to Ready to built to merged through Jira alone.
-
-### M4. A team that schedules itself
-
-`asf serve` reacts to events: new tickets, answers, ready items, finished steps, and wakes only the role that has
-work. Independent items run in parallel worktrees under a WIP limit. Passing items merge into the integration branch;
-the owner releases batches into the base branch. A rate limit pauses work until the quota resets instead of blocking
-the item. State is locked against concurrent writers, and a crash resumes or cleanly resets what was running. Checks
-run inside the builder's session before it may finish.
-
-Exit: 10 items with 3 workers, a process killed mid-run and restarted, the same outcome; no agent call while idle.
-
-### M5. Status for the owner, at any time
-
-`asf status` shows who is doing what, what waits for the owner, tokens and the integration branch's state. Decisions
-are queued with the options and the team's recommendation, and an item waiting on the owner does not hold up others.
-A digest goes to the tracker.
-
-Exit: the owner can follow and steer the work from Jira and the digest without opening a terminal.
-
-### M6. A team that learns
-
-After an item is blocked, rejected or needs several attempts, a short retrospective proposes lessons as checks, scoped
-docs or skill changes. Product changes wait for the owner's approval; factory changes become pull requests to this
-repository with `asf eval` numbers before and after. `asf eval --workflow` measures what a step is worth by running
-without it. Learning never loosens the policy.
-
-Exit: a repeated failure becomes a check and stops recurring, shown by the eval numbers.
-
-### M7. Dogfood and soak
-
-TEX-1 and at least one more product in the AI project, plus the factory improving itself, run unattended on server 2
-for 14 days and at least 100 items.
+At least two products and the factory improving itself, unattended on an always-on host for 14 days and at least
+100 items.
 
 Exit: every bar in "What works means" is met. Then 1.0 and the npm release.
 
@@ -166,3 +84,5 @@ Exit: every bar in "What works means" is met. Then 1.0 and the npm release.
   and cases are added whenever real work finds a failure the set missed.
 - **The sandbox is only as tight as its allowlist.** A package registry on the allowlist is a way out for anything
   that can publish to it; publishing commands stay denied and registries need no credentials.
+- **Judgement calls are unmeasured.** The size call, the tech lead's escalations and lesson decisions, and the market
+  scan are a model's judgement until the pilot measures them.

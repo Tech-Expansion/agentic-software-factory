@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { factoryRoot } from './paths.js';
 import type { BacklogItem } from './backlog.js';
-import { canonicalRole, ROLE_ALIASES, type ProjectConfig } from './config.js';
+import type { ProjectConfig } from './config.js';
 
 const stripFront = (text: string) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
 
@@ -24,10 +24,7 @@ function layered(kind: string, name: string, own: string, product: string[] = []
 
 /** `local` is the product's .factory directory, where `agents/<name>.md` adds to the role. */
 export function loadRole(role: string, local?: string): string {
-  const name = canonicalRole(role);
-  // A product's file under a role's old name still adds to it.
-  const names = [name, ...Object.keys(ROLE_ALIASES).filter((k) => ROLE_ALIASES[k] === name)];
-  return layered('role', name, join(factoryRoot, 'agents', `${name}.md`), local ? names.map((n) => join(local, 'agents', `${n}.md`)) : []);
+  return layered('role', role, join(factoryRoot, 'agents', `${role}.md`), local ? [join(local, 'agents', `${role}.md`)] : []);
 }
 
 /** `local` is the product's .factory directory, where `skills/<name>/SKILL.md` adds to the skill. */
@@ -54,7 +51,7 @@ export interface ItemContext {
   feedback?: string;
   checks?: string;
   diff?: string;
-  /** Acceptance tests written before the build, which the builder cannot change. */
+  /** Acceptance tests written before the build, which the developer cannot change. */
   lockedTests?: string[];
   /** The approved plan, for a high-risk item. */
   plan?: string;
@@ -104,7 +101,7 @@ export interface ClarifyContext {
   previous?: { questions: { id: string; question: string }[]; answers: Record<string, { answer: string }> };
 }
 
-/** The analyst's input: the requirement, the product around it, and what the owner already answered. */
+/** The product owner's input: the requirement, the product around it, and what the owner already answered. */
 export function clarifyPrompt(c: ClarifyContext): string {
   const { project, item } = c;
   const out: string[] = [`# Product: ${project.name} (stage: ${project.stage})`];

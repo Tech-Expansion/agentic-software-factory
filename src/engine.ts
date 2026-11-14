@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { canonicalRole, modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
+import { modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
@@ -43,7 +43,7 @@ interface Verdict {
   criteria: { id: string; status: 'met' | 'not_met' | 'unverified'; evidence: string }[];
   findings: { severity: 'blocker' | 'major' | 'minor'; message: string }[];
   summary: string;
-  /** Decisions for the client, which hold the change for them without failing it. */
+  /** Decisions for the owner, which hold the change for them without failing it. */
   escalate?: string[];
 }
 
@@ -64,12 +64,12 @@ interface Plan {
   files: string[];
   tests: string[];
   risks: string[];
-  client_decisions?: string[];
+  owner_decisions?: string[];
 }
 
 export function formatPlan(p: Plan): string {
   const list = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n') || '- (none)';
-  const asks = p.client_decisions?.length ? `\n\nFor the client to decide:\n${list(p.client_decisions)}` : '';
+  const asks = p.owner_decisions?.length ? `\n\nFor the owner to decide:\n${list(p.owner_decisions)}` : '';
   return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}${asks}`;
 }
 
@@ -91,7 +91,7 @@ function testedFeature(paths: ProductPaths, who: string): Workflow {
 
 /** A specialist's step runs only for a product that turned the specialist on. */
 export const specialistOn = (step: AgentStep, project: ProjectConfig) =>
-  !step.specialist || (project.specialists ?? []).some((r) => canonicalRole(r) === canonicalRole(step.role));
+  !step.specialist || (project.specialists ?? []).includes(step.role);
 
 /** Whether a step with `when` applies to this change: a changed file in one of its paths, or the item's risk. */
 export function stepApplies(step: AgentStep, item: BacklogItem, changed: string[], policy: Policy, project: ProjectConfig): boolean {
@@ -113,7 +113,7 @@ export function integrationBase(root: string, project: ProjectConfig): string {
 }
 
 /** The runner does not take "pass" on trust: an unmet criterion or a blocker finding fails the item. */
-export function verdictFails(v: Verdict, who = 'Verifier'): string | undefined {
+export function verdictFails(v: Verdict, who = 'QA'): string | undefined {
   const unmet = v.criteria.filter((c) => c.status === 'not_met');
   const blockers = v.findings.filter((f) => f.severity === 'blocker');
   if (v.verdict === 'pass' && !unmet.length && !blockers.length) return undefined;
@@ -216,7 +216,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
   const callAgent = async (step: AgentStep, attempt: number, extra: Pick<ItemContext, 'feedback' | 'checks' | 'diff'>, schema?: string) => {
     const runtimeName = runtimeFor(project, step.role);
     const locked = step.scope === 'tests' ? [] : (st.tests?.files ?? []);
-    // A builder on Claude Code runs the checks itself before it may finish, so a failure is fixed in the same session.
+    // A developer on Claude Code runs the checks itself before it may finish, so a failure is fixed in the same session.
     const stop =
       step.access === 'write' && !step.scope && runtimeName === 'claude-code' && policy.check_rounds_in_session > 0 && project.commands.check.length
         ? stopHook(paths, item.id, `a${attempt}-${step.id}`, { cwd: worktree, commands: project.commands.check, sandbox: policy.sandbox, max: policy.check_rounds_in_session })
@@ -273,7 +273,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     st.tests ? git(worktree, ['diff', '--cached', '--name-only', st.tests.commit, '--', ...st.tests.files]).split('\n').filter(Boolean) : [];
 
   // A high-risk item gets the tech lead's plan before anything is written. The build follows it at once, unless the
-  // plan needs a decision that is the client's: then it waits for them.
+  // plan needs a decision that is the owner's: then it waits for them.
   if (item.risk === 'high' && !st.plan?.approved) {
     if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
     const { result, runtimeName } = await callAgent(PLAN_STEP, 1, { feedback: st.feedback }, 'plan');
@@ -283,11 +283,11 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     const plan = result.structured as Plan;
     st.plan = { text: formatPlan(plan) };
     st.feedback = undefined;
-    if (plan.client_decisions?.length) return finish('plan-review', `the plan needs your decision: ${plan.client_decisions.join('; ')}`);
+    if (plan.owner_decisions?.length) return finish('plan-review', `the plan needs your decision: ${plan.owner_decisions.join('; ')}`);
     st.plan.approved = new Date().toISOString();
     st.plan.by = 'tech-lead';
     save();
-    event({ step: 'plan', kind: 'item', outcome: 'plan approved', detail: 'by the tech lead; nothing in it is the client\'s to decide' });
+    event({ step: 'plan', kind: 'item', outcome: 'plan approved', detail: 'by the tech lead; nothing in it is the owner\'s to decide' });
   }
 
   if (testsStep && !st.tests) {
@@ -322,7 +322,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     st.attempts = attempt;
     let checksText: string | undefined;
     let failed: string | undefined;
-    // Whether the tech lead passed this attempt, and what a reviewer left for the client to decide.
+    // Whether the tech lead passed this attempt, and what a reviewer left for the owner to decide.
     let reviewed = false;
     const escalated: string[] = [];
 
@@ -402,9 +402,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
         const errors = validate('verdict', result.structured);
         if (errors.length) return finish('blocked', `${step.id} returned an invalid verdict: ${errors.join('; ')}`);
         const v = result.structured as Verdict;
-        failed = verdictFails(v, step.id === 'verify' ? 'Verifier' : `Review by the ${step.role}`);
+        failed = verdictFails(v, step.id === 'verify' ? 'QA' : `Review by the ${step.role}`);
         if (failed) break;
-        if (canonicalRole(step.role) === 'tech-lead') reviewed = true;
+        if (step.role === 'tech-lead') reviewed = true;
         escalated.push(...(v.escalate ?? []).map((e) => `${step.role}: ${e}`));
       }
     }
@@ -426,10 +426,10 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
 
     if (!failed) {
       const changed = stageAndList(worktree, base);
-      // Anything flagged waits for the client on its own, even with an integration branch: what cannot be undone,
-      // and what a reviewer left for them. A workflow without the tech lead's review leaves the client the review of
+      // Anything flagged waits for the owner on its own, even with an integration branch: what cannot be undone,
+      // and what a reviewer left for them. A workflow without the tech lead's review leaves the owner the review of
       // approval and sensitive paths, and of high-risk items.
-      const flags = [...changed.filter((f) => matchesAny(f, policy.client_paths)), ...escalated];
+      const flags = [...changed.filter((f) => matchesAny(f, policy.owner_paths)), ...escalated];
       if (!reviewed) {
         flags.push(...changed.filter((f) => !flags.includes(f) && (matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths))));
         if (item.risk === 'high') flags.push('risk: high');

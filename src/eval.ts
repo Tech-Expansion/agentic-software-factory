@@ -36,7 +36,7 @@ export interface EvalCase {
   suite: 'regression' | 'capability';
   tags?: string[];
   hidden?: { check: string[] };
-  /** clarify: what the requirement leaves open, which a good analyst asks about. */
+  /** clarify: what the requirement leaves open, which a good product owner asks about. */
   gaps?: { id: string; gap: string }[];
   /** clarify: what the requirement settles, which asking about is needless. */
   settled?: string[];
@@ -108,7 +108,7 @@ export function loadCases(dir: string, only?: string): EvalCase[] {
 
 const read = <T>(file: string) => JSON.parse(readFileSync(file, 'utf8')) as T;
 
-/** The judgement of an analysis against the case's gaps. The judge sees the gaps; the analyst never does. */
+/** The judgement of an analysis against the case's gaps. The judge sees the gaps; the product owner never does. */
 interface Judgement {
   gaps: { id: string; covered: 'asked' | 'assumed' | 'missed'; by: string[] }[];
   needless: { question: string; reason: string }[];
@@ -119,13 +119,13 @@ function judgePrompt(c: EvalCase, requirement: string, cl: Clarification): strin
     `## Requirement\n\n${requirement}`,
     `## Gaps the requirement leaves open\n\n${c.gaps!.map((g) => `- ${g.id}: ${g.gap}`).join('\n')}`,
     `## What the requirement settles\n\n${(c.settled ?? []).map((s) => `- ${s}`).join('\n') || '(nothing listed)'}`,
-    `## The analyst's questions\n\n${cl.questions.map((q) => `- ${q.id}${q.blocking ? ' [blocking]' : ''}: ${q.question}`).join('\n') || '(none)'}`,
-    `## The analyst's assumptions\n\n${cl.assumptions.map((a, i) => `- A${i + 1}: ${a}`).join('\n') || '(none)'}`,
+    `## The product owner's questions\n\n${cl.questions.map((q) => `- ${q.id}${q.blocking ? ' [blocking]' : ''}: ${q.question}`).join('\n') || '(none)'}`,
+    `## The product owner's assumptions\n\n${cl.assumptions.map((a, i) => `- A${i + 1}: ${a}`).join('\n') || '(none)'}`,
   ].join('\n\n');
 }
 
 /**
- * A clarify case: the analyst reads the one new item, a judge marks which planted gaps its questions or assumptions
+ * A clarify case: the product owner reads the one new item, a judge marks which planted gaps its questions or assumptions
  * cover and which questions ask about what is settled. Delivered when no gap is missed and at most one question is
  * needless; asked and assumed are reported apart.
  */

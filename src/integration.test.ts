@@ -80,19 +80,19 @@ test('items that pass merge into the integration branch on their own; the owner 
   assert.deepEqual(loadState(join(root, '.factory/state.json')).items, {});
 });
 
-test('a change to a sensitive path merges once the tech lead passed it; a migration waits for the client', async () => {
+test('a change to a sensitive path merges once the tech lead passed it; a migration waits for the owner', async () => {
   item(1, '', 'keys/sign.txt');
   item(2, '', 'db/migrations/001.sql');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'items']);
   const out = await run({ all: true, context: { runtime: () => team() } });
   assert.deepEqual(out.map((o) => `${o.id}:${o.state}`), ['B-0001:merged', 'B-0002:review']);
-  assert.deepEqual(out[1]?.flags, ['db/migrations/001.sql'], 'client_paths wait however the change was reviewed');
+  assert.deepEqual(out[1]?.flags, ['db/migrations/001.sql'], 'owner_paths wait however the change was reviewed');
   assert.equal(approve('B-0002').into, 'integration');
   assert.match(git(root, ['show', 'integration:db/migrations/001.sql']), /migrations/);
 });
 
-test('a decision the tech lead escalates holds the change for the client without failing it', async () => {
+test('a decision the tech lead escalates holds the change for the owner without failing it', async () => {
   item(1);
   commitItems();
   const rt = team({ review: { escalate: ['Blockfrost paid tier: about 30 USD a month; recommended over running a node'] } });
@@ -102,7 +102,7 @@ test('a decision the tech lead escalates holds the change for the client without
   assert.equal(rt.calls.filter((c) => c.access === 'write' && !c.writeOnly).length, 1, 'not sent back to the developer');
 });
 
-test('without the tech lead\'s review, approval and sensitive paths wait for the client', async () => {
+test('without the tech lead\'s review, approval and sensitive paths wait for the owner', async () => {
   mkdirSync(join(root, '.factory/workflows'), { recursive: true });
   writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: developer, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
   item(1, 'workflow: lean\n', 'package.json');
@@ -112,7 +112,7 @@ test('without the tech lead\'s review, approval and sensitive paths wait for the
   assert.deepEqual(out?.flags, ['package.json']);
 });
 
-test('a high-risk item is planned by the tech lead and built at once when nothing in the plan is the client\'s', async () => {
+test('a high-risk item is planned by the tech lead and built at once when nothing in the plan is the owner\'s', async () => {
   item(1, 'risk: high\n');
   commitItems();
   const rt = team();
@@ -120,16 +120,16 @@ test('a high-risk item is planned by the tech lead and built at once when nothin
   assert.equal(out?.state, 'merged', 'the tech lead planned and reviewed it');
   assert.equal(rt.calls[0]!.access, 'read');
   assert.ok(rt.calls[0]!.schema, 'the plan has a schema');
-  const builder = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
-  assert.match(builder.prompt, /The approved plan[\s\S]*CIP-1854[\s\S]*src\/keys\/sign\.js/);
+  const developer = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
+  assert.match(developer.prompt, /The approved plan[\s\S]*CIP-1854[\s\S]*src\/keys\/sign\.js/);
   assert.ok(rt.calls.some((c) => c.writeOnly), 'with acceptance tests first');
   assert.ok(readEvents(join(root, '.factory/runs')).some((e) => e.outcome === 'plan approved' && /tech lead/.test(e.detail ?? '')));
 });
 
-test('a plan that needs the client waits for them, and the build follows it once they approve', async () => {
+test('a plan that needs the owner waits for them, and the build follows it once they approve', async () => {
   item(1, 'risk: high\n');
   commitItems();
-  const rt = team({ plan: { client_decisions: ['Keys in a hardware wallet (safer, needs a Ledger) or in the browser (recommended for preprod)'] } });
+  const rt = team({ plan: { owner_decisions: ['Keys in a hardware wallet (safer, needs a Ledger) or in the browser (recommended for preprod)'] } });
   const [planned] = await run({ context: { runtime: () => rt } });
   assert.equal(planned?.state, 'plan-review');
   assert.match(planned?.reason ?? '', /needs your decision: Keys in a hardware wallet/);
@@ -143,8 +143,8 @@ test('a plan that needs the client waits for them, and the build follows it once
   assert.equal(approve('B-0001').into, 'plan');
   const [built] = await run({ context: { runtime: () => rt } });
   assert.equal(built?.state, 'merged');
-  const builder = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
-  assert.match(builder.prompt, /The approved plan[\s\S]*For the client to decide:[\s\S]*hardware wallet/);
+  const developer = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
+  assert.match(developer.prompt, /The approved plan[\s\S]*For the owner to decide:[\s\S]*hardware wallet/);
 });
 
 const commitItems = () => {
@@ -158,7 +158,7 @@ test('a quick item is built without acceptance tests written first', async () =>
   const rt = team();
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'merged');
-  assert.equal(rt.calls.filter((c) => c.writeOnly).length, 0, 'no tester');
+  assert.equal(rt.calls.filter((c) => c.writeOnly).length, 0, 'no tests step');
   assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'read', 'read'], 'build, then QA and the tech lead');
 });
 
@@ -186,8 +186,8 @@ test('a high-risk item runs feature whatever workflow it names', async () => {
 test('a product adds rules to a role and brings its own workflow', async () => {
   mkdirSync(join(root, '.factory/agents'), { recursive: true });
   mkdirSync(join(root, '.factory/workflows'), { recursive: true });
-  writeFileSync(join(root, '.factory/agents/builder.md'), '---\nname: builder\n---\nNever log a mnemonic.\n');
-  writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: builder, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
+  writeFileSync(join(root, '.factory/agents/developer.md'), '---\nname: developer\n---\nNever log a mnemonic.\n');
+  writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: developer, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
   const project = join(root, '.factory/project.yaml');
   writeFileSync(project, readFileSync(project, 'utf8') + 'workflow: lean\n');
   item(1);
@@ -196,13 +196,13 @@ test('a product adds rules to a role and brings its own workflow', async () => {
   const rt = team();
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'merged');
-  assert.equal(rt.calls.length, 1, 'lean has no tester and no verifier');
+  assert.equal(rt.calls.length, 1, 'lean has no tests step and no QA');
   assert.match(rt.calls[0]!.systemPrompt, /You are the developer[\s\S]*## Product rules\n\nNever log a mnemonic\./, 'added after the factory\'s role, not instead of it');
 });
 
 test('a product feature workflow without tests blocks a high-risk item instead of building it untested', async () => {
   mkdirSync(join(root, '.factory/workflows'), { recursive: true });
-  writeFileSync(join(root, '.factory/workflows/feature.yaml'), 'name: feature\nsteps:\n  - { id: build, kind: agent, role: builder, skills: [implement-backlog-item], access: write }\n');
+  writeFileSync(join(root, '.factory/workflows/feature.yaml'), 'name: feature\nsteps:\n  - { id: build, kind: agent, role: developer, skills: [implement-backlog-item], access: write }\n');
   writeFileSync(join(root, '.factory/workflows/bad.yaml'), 'name: bad\nsteps:\n  - { id: build, kind: agent, role: ghost, skills: [nothing], access: write }\n');
   item(1, 'risk: high\n');
   commitItems();
@@ -254,7 +254,7 @@ test('an infra item is built by DevOps, reviewed by the tech lead, and by the se
   assert.deepEqual(validateProduct().errors, []);
   const rt = team();
   const [out] = await run({ context: { runtime: () => rt } });
-  assert.equal(out?.state, 'merged', 'reviewed; the client sees pipeline changes again at `asf deploy`');
+  assert.equal(out?.state, 'merged', 'reviewed; the owner sees pipeline changes again at `asf deploy`');
   const who = rt.calls.map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
   assert.deepEqual(who, ['the DevOps engineer', 'QA', 'the tech lead', 'the security reviewer']);
 });

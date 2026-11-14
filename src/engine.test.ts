@@ -25,9 +25,9 @@ const acceptance: Script = () => ({ write: { 'acceptance.test.js': "test('AC-001
 
 /**
  * A runtime that follows a script instead of calling a model. The tests step (the call limited to test files) follows
- * its own script and is kept out of `calls`, so the builder and verifier calls keep their numbers.
+ * its own script and is kept out of `calls`, so the developer and QA calls keep their numbers.
  */
-function fake(script: Script, tester: Script = acceptance): Runtime & { calls: AgentCall[]; testerCalls: AgentCall[] } {
+function fake(script: Script, qa: Script = acceptance): Runtime & { calls: AgentCall[]; testerCalls: AgentCall[] } {
   const calls: AgentCall[] = [];
   const testerCalls: AgentCall[] = [];
   return {
@@ -37,7 +37,7 @@ function fake(script: Script, tester: Script = acceptance): Runtime & { calls: A
     async call(c) {
       const own = c.writeOnly ? testerCalls : calls;
       own.push(c);
-      const r = (c.writeOnly ? tester : script)(c, own.length);
+      const r = (c.writeOnly ? qa : script)(c, own.length);
       for (const [f, text] of Object.entries(r.write ?? {})) {
         if (text === undefined) continue;
         mkdirSync(join(c.cwd, f, '..'), { recursive: true });
@@ -77,8 +77,8 @@ test('an item that passes checks and review waits for approval, and approve merg
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
   assert.equal(rt.calls.length, 3);
-  assert.match(rt.calls[1]!.prompt, /hello\.txt/, 'the verifier sees the diff');
-  assert.ok(rt.calls[1]!.schema, 'the verifier is asked for a verdict');
+  assert.match(rt.calls[1]!.prompt, /hello\.txt/, 'QA sees the diff');
+  assert.ok(rt.calls[1]!.schema, 'QA is asked for a verdict');
   assert.match(rt.calls[2]!.systemPrompt, /You are the tech lead[\s\S]*# Skill: review-code/, 'then the tech lead reviews the code');
   assert.match(rt.calls[2]!.prompt, /hello\.txt/, 'the tech lead sees the diff');
   assert.equal(existsSync(join(root, 'hello.txt')), false, 'nothing lands on main before approval');
@@ -91,7 +91,7 @@ test('an item that passes checks and review waits for approval, and approve merg
   assert.match(report(), /Done\n\n- B-0001 Say hello/);
 });
 
-test('failed checks go back to the builder with the output, without a model review', async () => {
+test('failed checks go back to the developer with the output, without a model review', async () => {
   const rt = fake((c, n) => (c.access === 'write' ? (n === 1 ? { write: { 'other.txt': 'x' } } : { write: { 'hello.txt': 'hi' } }) : { structured: verdict(true) }));
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
@@ -105,7 +105,7 @@ test('an item that keeps failing review is blocked after max_attempts', async ()
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'blocked');
   assert.equal(rt.calls.length, 5, 'tests, two builds and reviews, the retro');
-  assert.match(rt.calls[4]!.prompt, /What went wrong, in order[\s\S]*Attempt 1: Verifier/);
+  assert.match(rt.calls[4]!.prompt, /What went wrong, in order[\s\S]*Attempt 1: QA/);
   assert.match(rt.calls[2]!.prompt, /AC-001 not_met: no hello.txt/);
 });
 
@@ -158,25 +158,25 @@ test('deleting a test to get through is sent back', async () => {
   assert.match(rt.calls[1]!.prompt, /deleted test file hello\.test\.js/);
 });
 
-test('acceptance tests come first, only test files are kept, and the builder cannot change them', async () => {
+test('acceptance tests come first, only test files are kept, and the developer cannot change them', async () => {
   const rt = fake(
     (c, n) => (c.access === 'write' ? { write: n === 1 ? { 'hello.txt': 'hi', 'acceptance.test.js': '// gone\n' } : { 'hello.txt': 'hi' } } : { structured: verdict(true) }),
-    () => ({ write: { 'acceptance.test.js': "test('AC-001', () => {});\n", 'hello.txt': 'from the tester' } }),
+    () => ({ write: { 'acceptance.test.js': "test('AC-001', () => {});\n", 'hello.txt': 'from QA' } }),
   );
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
   assert.equal(rt.testerCalls.length, 1);
-  assert.ok(rt.testerCalls[0]!.writeOnly!.includes('**/*.test.*'), 'the tester may write test files only');
+  assert.ok(rt.testerCalls[0]!.writeOnly!.includes('**/*.test.*'), 'QA may write test files only');
   const build = rt.calls[0]!;
-  assert.ok(build.protectedPaths.includes('acceptance.test.js'), 'the builder is denied the locked tests');
+  assert.ok(build.protectedPaths.includes('acceptance.test.js'), 'the developer is denied the locked tests');
   assert.match(build.prompt, /Acceptance tests \(locked\)[\s\S]*- acceptance\.test\.js/);
   assert.match(rt.calls[1]!.prompt, /acceptance tests are locked[\s\S]*acceptance\.test\.js/);
 
   const wt = join(root, '.factory/worktrees/B-0001');
   assert.deepEqual(git(wt, ['log', '--format=%s', 'main..HEAD']).trim().split('\n'), ['feat: Say hello', 'test: acceptance tests for Say hello']);
   assert.equal(git(wt, ['show', 'HEAD~1:acceptance.test.js']), "test('AC-001', () => {});\n");
-  assert.equal(git(wt, ['show', 'HEAD:acceptance.test.js']), "test('AC-001', () => {});\n", 'the builder change was put back');
-  assert.equal(git(wt, ['show', 'HEAD~1', '--name-only', '--format=']).trim(), 'acceptance.test.js', 'the tester commit holds tests only');
+  assert.equal(git(wt, ['show', 'HEAD:acceptance.test.js']), "test('AC-001', () => {});\n", 'the developer change was put back');
+  assert.equal(git(wt, ['show', 'HEAD~1', '--name-only', '--format=']).trim(), 'acceptance.test.js', 'the tests commit holds tests only');
   assert.equal(readFileSync(join(wt, 'hello.txt'), 'utf8'), 'hi');
   const red = readEvents(join(root, '.factory/runs')).find((e) => e.step === 'tests' && e.kind === 'checks');
   assert.equal(red?.outcome, 'reverted');

@@ -28,8 +28,9 @@ export interface Lesson extends Omit<Proposed, 'recurs'> {
   /** What accepting it made: a backlog item, a line in the memory, a proposal file for the factory. */
   applied?: string;
   note?: string;
-  /** Who decided it: the tech lead after the retro, or the client, who can reverse the tech lead. */
+  /** Who decided it: the tech lead after the retro, or the owner, who can reverse the tech lead. */
   decided_by?: 'tech-lead' | 'owner';
+  decided_at?: string;
   reason?: string;
 }
 
@@ -126,7 +127,7 @@ export async function retro(ctx: EngineContext, item: BacklogItem, outcome: Item
   return touched;
 }
 
-/** The tech lead decides the lessons a retro proposed. One that is not decided, or fails to apply, stays for the client. */
+/** The tech lead decides the lessons a retro proposed. One that is not decided, or fails to apply, stays for the owner. */
 export async function decideLessons(ctx: EngineContext, item: BacklogItem, proposed: Lesson[]): Promise<Lesson[]> {
   const { paths, project, policy } = ctx;
   const open = proposed.filter((l) => l.status === 'proposed');
@@ -179,7 +180,7 @@ export async function decideLessons(ctx: EngineContext, item: BacklogItem, propo
 }
 
 /**
- * A decision on a lesson: the tech lead's on a proposed one, or the client's, who may also reverse one already made.
+ * A decision on a lesson: the tech lead's on a proposed one, or the owner's, who may also reverse one already made.
  * Accepting one never changes the policy: a check becomes a backlog item the team builds like any other, a doc becomes
  * a line in the project memory, and a factory lesson becomes a proposal for the factory's own repository, to be
  * measured with `asf eval` before it is adopted. Reversing an accepted one parks its backlog item, takes its line out
@@ -197,9 +198,9 @@ export function decideLesson(product: Product, id: string, decision: 'accept' | 
     if (currentBranch(paths.root) !== base || !isClean(paths.root)) throw new UsageError(`check out ${base} with a clean tree first; deciding ${id} commits to it`);
   };
   const decided = () => {
-    Object.assign(l, { decided_by: who.by, reason: who.reason });
+    Object.assign(l, { decided_by: who.by, decided_at: new Date().toISOString(), reason: who.reason });
     saveLessons(paths.factory, lessons);
-    appendEvent(paths.runs, { at: new Date().toISOString(), item: l.items[0]!, step: 'lesson', kind: 'item', outcome: l.status, detail: `${l.id} by the ${who.by === 'owner' ? 'client' : 'tech lead'}${l.applied ? ` → ${l.applied}` : ''}` });
+    appendEvent(paths.runs, { at: new Date().toISOString(), item: l.items[0]!, step: 'lesson', kind: 'item', outcome: l.status, detail: `${l.id} by the ${who.by === 'owner' ? 'owner' : 'tech lead'}${l.applied ? ` → ${l.applied}` : ''}` });
     return l;
   };
   if (decision === 'reject') {

@@ -33,4 +33,4 @@ Rules:
 - Number criteria `AC-001`, `AC-002`, ... within the spec. Never reuse or renumber a published id; retire it instead.
 - Mark the spec `approved` only after the user agrees. A spec with open questions that affect a criterion is not
   approved.
-- Keep it short. A spec the builder has to read in full on every attempt costs tokens on every attempt.
+- Keep it short. A spec the developer has to read in full on every attempt costs tokens on every attempt.

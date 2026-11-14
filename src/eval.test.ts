@@ -40,7 +40,7 @@ function makeCase(dir: string, id: string) {
 
 const pass = { verdict: 'pass', criteria: [{ id: 'AC-001', status: 'met', evidence: 'ok' }], findings: [], summary: 'ok' };
 
-/** Writes whatever `content` says into hello.txt, and the verifier always passes it. */
+/** Writes whatever `content` says into hello.txt, and QA always passes it. */
 function fake(content: (c: AgentCall) => string): Runtime {
   return {
     name: 'claude-code',
@@ -146,7 +146,7 @@ test('eval: a clarify case is scored on the gaps it covers, and nothing is built
         const structured = { gaps: [{ id: 'g1', covered: 'asked', by: ['Q1'] }, { id: 'g2', covered: vague ? 'missed' : 'assumed', by: [] }], needless: vague ? [{ question: 'Q2', reason: 'preprod is settled' }] : [] };
         return { ok: true, text: '', structured, tokens, durationMs: 1 };
       }
-      assert.equal(c.access, 'read', 'only the analyst and the judge run');
+      assert.equal(c.access, 'read', 'only the product owner and the judge run');
       const structured = { understood: 'a wallet', questions: [{ id: 'Q1', question: 'Which platform?', why: 'stack', options: [], recommendation: 'web', blocking: true }], assumptions: ['recovery by a backup key'] };
       return { ok: true, text: '', structured, tokens, durationMs: 1 };
     },

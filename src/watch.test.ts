@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
 import { init } from './commands/init.js';
-import { serve } from './commands/serve.js';
+import { watch } from './commands/watch.js';
 import { git } from './git.js';
 import { loadState, saveState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
@@ -61,7 +61,7 @@ beforeEach(() => {
 
 test('an idle team spends nothing', async () => {
   const rt = team();
-  const r = await serve({ rounds: 5, sleep: quick, context: { runtime: () => rt } });
+  const r = await watch({ rounds: 5, sleep: quick, context: { runtime: () => rt } });
   assert.equal(r.rounds, 5);
   assert.equal(rt.calls.length, 0);
   assert.ok(!existsSync(join(root, '.factory/lock')), 'the lock is given back');
@@ -70,7 +70,7 @@ test('an idle team spends nothing', async () => {
 test('independent items are built in parallel, never more than the workers', async () => {
   items(3);
   const rt = team();
-  const r = await serve({ workers: 2, rounds: 40, sleep: quick, context: { runtime: () => rt } });
+  const r = await watch({ workers: 2, rounds: 40, sleep: quick, context: { runtime: () => rt } });
   assert.deepEqual(r.outcomes.map((o) => o.state), ['review', 'review', 'review']);
   assert.equal(rt.peak, 2);
   assert.deepEqual(Object.values(loadState(join(root, '.factory/state.json')).items).map((s) => s.state), ['review', 'review', 'review']);
@@ -81,7 +81,7 @@ test('a usage limit pauses the work until the quota resets, then it resumes', as
   let clock = 1_000_000_000_000;
   const slept: number[] = [];
   const rt = team({ limitFirst: clock / 1000 + 150 });
-  const r = await serve({
+  const r = await watch({
     rounds: 8,
     intervalSeconds: 60,
     now: () => clock,
@@ -104,15 +104,15 @@ test('items that were running when the factory stopped resume', async () => {
   state.items['B-0001'] = { state: 'in-progress', branch: 'asf/B-0001', worktree: join(root, '.factory/worktrees/B-0001'), attempts: 1, tokens: 0, updated_at: '' };
   saveState(join(root, '.factory/state.json'), state);
   const logs: string[] = [];
-  const r = await serve({ rounds: 10, sleep: quick, log: (m) => logs.push(m), context: { runtime: () => team() } });
+  const r = await watch({ rounds: 10, sleep: quick, log: (m) => logs.push(m), context: { runtime: () => team() } });
   assert.ok(logs.includes('B-0001 resumes where it stopped'));
   assert.equal(r.outcomes[0]?.state, 'review');
 });
 
 test('one process at a time; a lock left by a dead one is taken over', async () => {
   mkdirSync(join(root, '.factory'), { recursive: true });
-  writeFileSync(join(root, '.factory/lock'), JSON.stringify({ pid: process.ppid, what: 'serve', at: 'earlier' }));
-  await assert.rejects(serve({ rounds: 1, sleep: quick, context: { runtime: () => team() } }), /already working on this product/);
-  writeFileSync(join(root, '.factory/lock'), JSON.stringify({ pid: 2 ** 22 + 12345, what: 'serve', at: 'earlier' }));
-  assert.equal((await serve({ rounds: 1, sleep: quick, context: { runtime: () => team() } })).rounds, 1);
+  writeFileSync(join(root, '.factory/lock'), JSON.stringify({ pid: process.ppid, what: 'watch', at: 'earlier' }));
+  await assert.rejects(watch({ rounds: 1, sleep: quick, context: { runtime: () => team() } }), /already working on this product/);
+  writeFileSync(join(root, '.factory/lock'), JSON.stringify({ pid: 2 ** 22 + 12345, what: 'watch', at: 'earlier' }));
+  assert.equal((await watch({ rounds: 1, sleep: quick, context: { runtime: () => team() } })).rounds, 1);
 });

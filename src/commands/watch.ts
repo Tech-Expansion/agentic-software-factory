@@ -14,7 +14,7 @@ import { openProduct, runtimes, UsageError } from './context.js';
 import { learn, settle } from './run.js';
 import { sync } from './sync.js';
 
-export interface ServeOptions {
+export interface WatchOptions {
   root?: string;
   /** Items built at the same time, each in its own worktree. */
   workers?: number;
@@ -38,7 +38,7 @@ const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * Each round only wakes the roles that have work, so an idle team spends no tokens. A usage limit pauses the work
  * until the quota resets instead of failing items; a stop or a crash leaves items to be resumed.
  */
-export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; outcomes: ItemOutcome[] }> {
+export async function watch(opts: WatchOptions = {}): Promise<{ rounds: number; outcomes: ItemOutcome[] }> {
   const product = openProduct(opts.root);
   const { paths, project } = product;
   if (!isRepo(paths.root)) throw new UsageError(`${paths.root} is not a git repository`);
@@ -52,7 +52,7 @@ export async function serve(opts: ServeOptions = {}): Promise<{ rounds: number; 
   const ctx: EngineContext = { ...product, runtime: (n) => runtimes[n], log, ...opts.context };
   const tracked = !!(opts.tracker || project.tracker);
 
-  const unlock = acquire(paths.factory, 'serve');
+  const unlock = acquire(paths.factory, 'watch');
   try {
     recover(paths, log);
     const running = new Map<string, Promise<void>>();
@@ -146,7 +146,7 @@ function recover(paths: ReturnType<typeof openProduct>['paths'], log: (msg: stri
   for (const [id, st] of Object.entries(state.items)) {
     if (st.state !== 'in-progress') continue;
     state.items[id] = { ...st, state: 'rework', reason: 'resumed after the factory stopped', updated_at: new Date().toISOString() };
-    appendEvent(paths.runs, { at: new Date().toISOString(), item: id, step: 'serve', kind: 'item', outcome: 'resumed' });
+    appendEvent(paths.runs, { at: new Date().toISOString(), item: id, step: 'watch', kind: 'item', outcome: 'resumed' });
     log(`${id} resumes where it stopped`);
     changed = true;
   }

@@ -22,9 +22,9 @@ export interface StopHookCount {
 }
 
 /**
- * Claude Code's Stop hook for build steps: when the builder wants to finish, the product's checks run, sandboxed and
- * without secrets, as the runner runs them. A failure sends the builder back with the output, in the same session,
- * so it is fixed with everything the builder already knows. After `max` rounds the builder is let go and the runner's
+ * Claude Code's Stop hook for build steps: when the developer wants to finish, the product's checks run, sandboxed and
+ * without secrets, as the runner runs them. A failure sends the developer back with the output, in the same session,
+ * so it is fixed with everything the developer already knows. After `max` rounds the developer is let go and the runner's
  * check step decides as before; nothing here can let a failing item through.
  */
 export function stopCheck(cfg: StopHookConfig): { block: boolean; reason?: string; count: StopHookCount } {

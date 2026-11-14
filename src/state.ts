@@ -16,7 +16,7 @@ export interface ItemState {
   feedback?: string;
   flags?: string[];
   summary?: string;
-  /** A high-risk item's plan, and when it was approved: by the tech lead, or by the client when it needed them. */
+  /** A high-risk item's plan, and when it was approved: by the tech lead, or by the owner when it needed them. */
   plan?: { text: string; approved?: string; by?: 'tech-lead' | 'owner' };
   /** The commit with the item's acceptance tests, and the files in it, which later steps cannot change. */
   tests?: { commit: string; files: string[] };

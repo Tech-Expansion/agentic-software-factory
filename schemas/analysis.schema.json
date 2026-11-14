@@ -9,7 +9,7 @@
     "understood": {
       "type": "string",
       "minLength": 1,
-      "description": "What the requirement asks for, in a few sentences, as the analyst understood it."
+      "description": "What the requirement asks for, in a few sentences, as the product owner understood it."
     },
     "questions": {
       "type": "array",

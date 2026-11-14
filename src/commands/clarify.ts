@@ -102,11 +102,13 @@ export function answer(id: string, question: string | undefined, text: string, o
 }
 
 /** Every open question, with its options and the team's recommendation. */
-export function questions(root?: string): string {
+/** The product owner's open questions on new items, or on one item, with the options and the recommendation. */
+export function questions(root?: string, id?: string): string {
   const product = openProduct(root);
   const { items } = loadBacklog(product.paths.backlog);
+  if (id && !items.some((i) => i.id === id)) throw new UsageError(`no backlog item ${id}`);
   const out: string[] = [];
-  for (const item of items.filter((i) => i.status === 'new')) {
+  for (const item of items.filter((i) => i.status === 'new' && (!id || i.id === id))) {
     const c = loadClarification(product.paths.factory, item.id);
     if (!c) {
       out.push(`${item.id} ${item.title}: not analysed yet (asf clarify)`, '');

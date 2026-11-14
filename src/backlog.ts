@@ -7,7 +7,7 @@ import type { ItemState, State } from './state.js';
 export interface BacklogItem {
   id: string;
   title: string;
-  /** new: waiting for the analyst or the owner's answers. draft: parked by the owner. Only ready items are built. */
+  /** new: waiting for the product owner or the owner's answers. draft: parked by the owner. Only ready items are built. */
   status: 'new' | 'draft' | 'ready' | 'done';
   priority?: number;
   spec?: string;
