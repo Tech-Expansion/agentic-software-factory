@@ -32,6 +32,11 @@
         }
       }
     },
-    "summary": { "type": "string" }
+    "summary": { "type": "string" },
+    "escalate": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Decisions that are the client's, one line each in their words: a new cost, something that cannot be undone, a change to the agreed architecture. They do not fail the change; it waits for the client."
+    }
   }
 }

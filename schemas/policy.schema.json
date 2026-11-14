@@ -19,6 +19,11 @@
       "items": { "type": "string" },
       "description": "Glob patterns. An item whose diff touches one is flagged for the user's attention before approval."
     },
+    "client_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns. A change that touches one waits for the client's approval, even after the tech lead's review."
+    },
     "protected_paths": {
       "type": "array",
       "items": { "type": "string" },

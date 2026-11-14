@@ -20,8 +20,8 @@ process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.in
 const plan = { approach: 'Use CIP-1854 keys.', files: ['src/keys/sign.js'], tests: ['AC-001 a missing gate signature is refused'], risks: ['a wrong key signs'] };
 const pass = { verdict: 'pass', criteria: [], findings: [], summary: 'good' };
 
-/** Each item writes the file its body names; the tech lead returns a plan. */
-function team(): Runtime & { calls: AgentCall[] } {
+/** Each item writes the file its body names; the tech lead returns a plan, and its review is `review` when given. */
+function team(over: { plan?: object; review?: object } = {}): Runtime & { calls: AgentCall[] } {
   const calls: AgentCall[] = [];
   return {
     name: 'claude-code',
@@ -29,7 +29,8 @@ function team(): Runtime & { calls: AgentCall[] } {
     async call(c): Promise<AgentResult> {
       calls.push(c);
       const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
-      if (c.systemPrompt.includes('# Skill: plan-change')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
+      if (c.systemPrompt.includes('# Skill: plan-change')) return { ok: true, text: '', structured: { ...plan, ...over.plan }, tokens, durationMs: 1 };
+      if (c.systemPrompt.includes('# Skill: review-code') && over.review) return { ok: true, text: '', structured: { ...pass, ...over.review }, tokens, durationMs: 1 };
       if (c.access === 'write' && !c.writeOnly) {
         const file = /writes (\S+)/.exec(c.prompt)![1]!;
         mkdirSync(join(c.cwd, file, '..'), { recursive: true });
@@ -79,27 +80,60 @@ test('items that pass merge into the integration branch on their own; the owner 
   assert.deepEqual(loadState(join(root, '.factory/state.json')).items, {});
 });
 
-test('a change to a sensitive path waits for the owner, even with an integration branch', async () => {
+test('a change to a sensitive path merges once the tech lead passed it; a migration waits for the client', async () => {
   item(1, '', 'keys/sign.txt');
+  item(2, '', 'db/migrations/001.sql');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'items']);
-  const [out] = await run({ context: { runtime: () => team() } });
-  assert.equal(out?.state, 'review');
-  assert.deepEqual(out?.flags, ['keys/sign.txt']);
-  assert.equal(approve('B-0001').into, 'integration');
-  assert.match(git(root, ['show', 'integration:keys/sign.txt']), /keys/);
+  const out = await run({ all: true, context: { runtime: () => team() } });
+  assert.deepEqual(out.map((o) => `${o.id}:${o.state}`), ['B-0001:merged', 'B-0002:review']);
+  assert.deepEqual(out[1]?.flags, ['db/migrations/001.sql'], 'client_paths wait however the change was reviewed');
+  assert.equal(approve('B-0002').into, 'integration');
+  assert.match(git(root, ['show', 'integration:db/migrations/001.sql']), /migrations/);
 });
 
-test('a high-risk item is planned, the owner approves the plan, and the build follows it and waits again', async () => {
+test('a decision the tech lead escalates holds the change for the client without failing it', async () => {
+  item(1);
+  commitItems();
+  const rt = team({ review: { escalate: ['Blockfrost paid tier: about 30 USD a month; recommended over running a node'] } });
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  assert.deepEqual(out?.flags, ['tech-lead: Blockfrost paid tier: about 30 USD a month; recommended over running a node']);
+  assert.equal(rt.calls.filter((c) => c.access === 'write' && !c.writeOnly).length, 1, 'not sent back to the developer');
+});
+
+test('without the tech lead\'s review, approval and sensitive paths wait for the client', async () => {
+  mkdirSync(join(root, '.factory/workflows'), { recursive: true });
+  writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: developer, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
+  item(1, 'workflow: lean\n', 'package.json');
+  commitItems();
+  const [out] = await run({ context: { runtime: () => team() } });
+  assert.equal(out?.state, 'review');
+  assert.deepEqual(out?.flags, ['package.json']);
+});
+
+test('a high-risk item is planned by the tech lead and built at once when nothing in the plan is the client\'s', async () => {
   item(1, 'risk: high\n');
-  git(root, ['add', '-A']);
-  git(root, ['commit', '-q', '-m', 'items']);
+  commitItems();
   const rt = team();
-  const [planned] = await run({ context: { runtime: () => rt } });
-  assert.equal(planned?.state, 'plan-review');
-  assert.equal(rt.calls.length, 1);
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'merged', 'the tech lead planned and reviewed it');
   assert.equal(rt.calls[0]!.access, 'read');
   assert.ok(rt.calls[0]!.schema, 'the plan has a schema');
+  const builder = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
+  assert.match(builder.prompt, /The approved plan[\s\S]*CIP-1854[\s\S]*src\/keys\/sign\.js/);
+  assert.ok(rt.calls.some((c) => c.writeOnly), 'with acceptance tests first');
+  assert.ok(readEvents(join(root, '.factory/runs')).some((e) => e.outcome === 'plan approved' && /tech lead/.test(e.detail ?? '')));
+});
+
+test('a plan that needs the client waits for them, and the build follows it once they approve', async () => {
+  item(1, 'risk: high\n');
+  commitItems();
+  const rt = team({ plan: { client_decisions: ['Keys in a hardware wallet (safer, needs a Ledger) or in the browser (recommended for preprod)'] } });
+  const [planned] = await run({ context: { runtime: () => rt } });
+  assert.equal(planned?.state, 'plan-review');
+  assert.match(planned?.reason ?? '', /needs your decision: Keys in a hardware wallet/);
+  assert.equal(rt.calls.length, 1);
   assert.deepEqual(await run({ context: { runtime: () => rt } }), [], 'nothing is built before the plan is approved');
 
   reject('B-0001', 'use a hardware wallet');
@@ -108,10 +142,9 @@ test('a high-risk item is planned, the owner approves the plan, and the build fo
 
   assert.equal(approve('B-0001').into, 'plan');
   const [built] = await run({ context: { runtime: () => rt } });
-  assert.equal(built?.state, 'review', 'a high-risk change never merges on its own');
-  assert.ok(built?.flags.includes('risk: high'));
+  assert.equal(built?.state, 'merged');
   const builder = rt.calls.find((c) => c.access === 'write' && !c.writeOnly)!;
-  assert.match(builder.prompt, /Plan approved by the owner[\s\S]*CIP-1854[\s\S]*src\/keys\/sign\.js/);
+  assert.match(builder.prompt, /The approved plan[\s\S]*For the client to decide:[\s\S]*hardware wallet/);
 });
 
 const commitItems = () => {
@@ -134,8 +167,7 @@ test('a quick change to a sensitive path is thrown away and built again, tests f
   commitItems();
   const rt = team();
   const [out] = await run({ context: { runtime: () => rt } });
-  assert.equal(out?.state, 'review');
-  assert.deepEqual(out?.flags, ['keys/sign.txt']);
+  assert.equal(out?.state, 'merged');
   assert.deepEqual(rt.calls.map((c) => (c.writeOnly ? 'tests' : c.access)), ['write', 'tests', 'write', 'read', 'read'], 'the quick build was not verified; feature ran from its tests step');
   assert.match(rt.calls.at(-1)!.systemPrompt, /You are the tech lead/, 'the tech lead reviews it');
   const escalated = readEvents(join(root, '.factory/runs')).find((e) => e.outcome === 'escalated');
@@ -145,8 +177,10 @@ test('a quick change to a sensitive path is thrown away and built again, tests f
 test('a high-risk item runs feature whatever workflow it names', async () => {
   item(1, 'risk: high\nworkflow: quick\n');
   commitItems();
-  const [out] = await run({ context: { runtime: () => team() } });
-  assert.equal(out?.state, 'plan-review');
+  const rt = team();
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'merged');
+  assert.ok(rt.calls.some((c) => c.writeOnly), 'feature: acceptance tests first');
 });
 
 test('a product adds rules to a role and brings its own workflow', async () => {
@@ -220,8 +254,7 @@ test('an infra item is built by DevOps, reviewed by the tech lead, and by the se
   assert.deepEqual(validateProduct().errors, []);
   const rt = team();
   const [out] = await run({ context: { runtime: () => rt } });
-  assert.equal(out?.state, 'review', 'CI files are approval paths');
-  assert.deepEqual(out?.flags, ['.github/workflows/ci.yml']);
+  assert.equal(out?.state, 'merged', 'reviewed; the client sees pipeline changes again at `asf deploy`');
   const who = rt.calls.map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
   assert.deepEqual(who, ['the DevOps engineer', 'QA', 'the tech lead', 'the security reviewer']);
 });

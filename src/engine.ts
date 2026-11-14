@@ -43,6 +43,8 @@ interface Verdict {
   criteria: { id: string; status: 'met' | 'not_met' | 'unverified'; evidence: string }[];
   findings: { severity: 'blocker' | 'major' | 'minor'; message: string }[];
   summary: string;
+  /** Decisions for the client, which hold the change for them without failing it. */
+  escalate?: string[];
 }
 
 /** True when a failed call hit the subscription's usage limit rather than something a person must fix. */
@@ -62,11 +64,13 @@ interface Plan {
   files: string[];
   tests: string[];
   risks: string[];
+  client_decisions?: string[];
 }
 
 export function formatPlan(p: Plan): string {
   const list = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n') || '- (none)';
-  return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}`;
+  const asks = p.client_decisions?.length ? `\n\nFor the client to decide:\n${list(p.client_decisions)}` : '';
+  return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}${asks}`;
 }
 
 /**
@@ -109,11 +113,11 @@ export function integrationBase(root: string, project: ProjectConfig): string {
 }
 
 /** The runner does not take "pass" on trust: an unmet criterion or a blocker finding fails the item. */
-export function verdictFails(v: Verdict): string | undefined {
+export function verdictFails(v: Verdict, who = 'Verifier'): string | undefined {
   const unmet = v.criteria.filter((c) => c.status === 'not_met');
   const blockers = v.findings.filter((f) => f.severity === 'blocker');
   if (v.verdict === 'pass' && !unmet.length && !blockers.length) return undefined;
-  const lines = [`Verifier: ${v.summary}`];
+  const lines = [`${who}: ${v.summary}`];
   for (const c of v.criteria.filter((c) => c.status !== 'met')) lines.push(`- ${c.id} ${c.status}: ${c.evidence}`);
   for (const f of v.findings) lines.push(`- [${f.severity}] ${f.message}`);
   return lines.join('\n');
@@ -268,16 +272,22 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
   const lockedChanges = () =>
     st.tests ? git(worktree, ['diff', '--cached', '--name-only', st.tests.commit, '--', ...st.tests.files]).split('\n').filter(Boolean) : [];
 
-  // A high-risk item gets a plan the owner approves before anything is written.
+  // A high-risk item gets the tech lead's plan before anything is written. The build follows it at once, unless the
+  // plan needs a decision that is the client's: then it waits for them.
   if (item.risk === 'high' && !st.plan?.approved) {
     if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
     const { result, runtimeName } = await callAgent(PLAN_STEP, 1, { feedback: st.feedback }, 'plan');
     if (!result.ok) return stopped(result, runtimeName, 'plan');
     const errors = validate('plan', result.structured);
     if (errors.length) return finish('blocked', `plan returned an invalid plan: ${errors.join('; ')}`);
-    st.plan = { text: formatPlan(result.structured as Plan) };
+    const plan = result.structured as Plan;
+    st.plan = { text: formatPlan(plan) };
     st.feedback = undefined;
-    return finish('plan-review', 'the plan waits for your approval');
+    if (plan.client_decisions?.length) return finish('plan-review', `the plan needs your decision: ${plan.client_decisions.join('; ')}`);
+    st.plan.approved = new Date().toISOString();
+    st.plan.by = 'tech-lead';
+    save();
+    event({ step: 'plan', kind: 'item', outcome: 'plan approved', detail: 'by the tech lead; nothing in it is the client\'s to decide' });
   }
 
   if (testsStep && !st.tests) {
@@ -312,6 +322,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     st.attempts = attempt;
     let checksText: string | undefined;
     let failed: string | undefined;
+    // Whether the tech lead passed this attempt, and what a reviewer left for the client to decide.
+    let reviewed = false;
+    const escalated: string[] = [];
 
     for (const step of steps) {
       if (step.kind === 'checks') {
@@ -388,8 +401,11 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
       if (step.output === 'verdict') {
         const errors = validate('verdict', result.structured);
         if (errors.length) return finish('blocked', `${step.id} returned an invalid verdict: ${errors.join('; ')}`);
-        failed = verdictFails(result.structured as Verdict);
+        const v = result.structured as Verdict;
+        failed = verdictFails(v, step.id === 'verify' ? 'Verifier' : `Review by the ${step.role}`);
         if (failed) break;
+        if (canonicalRole(step.role) === 'tech-lead') reviewed = true;
+        escalated.push(...(v.escalate ?? []).map((e) => `${step.role}: ${e}`));
       }
     }
 
@@ -410,9 +426,14 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
 
     if (!failed) {
       const changed = stageAndList(worktree, base);
-      // Anything flagged waits for the owner on its own, even with an integration branch.
-      const flags = changed.filter((f) => matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths));
-      if (item.risk === 'high') flags.push('risk: high');
+      // Anything flagged waits for the client on its own, even with an integration branch: what cannot be undone,
+      // and what a reviewer left for them. A workflow without the tech lead's review leaves the client the review of
+      // approval and sensitive paths, and of high-risk items.
+      const flags = [...changed.filter((f) => matchesAny(f, policy.client_paths)), ...escalated];
+      if (!reviewed) {
+        flags.push(...changed.filter((f) => !flags.includes(f) && (matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths))));
+        if (item.risk === 'high') flags.push('risk: high');
+      }
       commitAll(worktree, `${subject(item, `feat: ${item.title}`)}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
       st.feedback = undefined;
       return finish('review', undefined, flags);

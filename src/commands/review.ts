@@ -31,7 +31,7 @@ export function approve(id: string, root?: string): { merged: string; into: stri
   const { product, state, st } = reviewItem(id, root);
   const { paths, project } = product;
   if (st?.state === 'plan-review' && st.plan) {
-    state.items[id] = { ...st, state: 'rework', plan: { ...st.plan, approved: new Date().toISOString() }, reason: undefined, updated_at: new Date().toISOString() };
+    state.items[id] = { ...st, state: 'rework', plan: { ...st.plan, approved: new Date().toISOString(), by: 'owner' }, reason: undefined, updated_at: new Date().toISOString() };
     saveState(paths.state, state);
     appendEvent(paths.runs, { at: new Date().toISOString(), item: id, step: 'approve', kind: 'item', outcome: 'plan approved' });
     return { merged: '', into: 'plan', flags: [] };

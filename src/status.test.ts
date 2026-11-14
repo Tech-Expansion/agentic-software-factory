@@ -65,7 +65,7 @@ test('the board puts every item in a column and every decision in one queue, old
   assert.equal(b.tokens.today, 1500);
   const text = formatBoard(b, now);
   assert.match(text, /Team: not running/);
-  assert.match(text, /Waiting for you \(4\)[\s\S]*B-0005 Item 5 \[plan, 5h\][\s\S]*asf decide B-0005 approve[\s\S]*B-0004 Item 4 \[review, 3h\]: review the change; it touches src\/keys\//);
+  assert.match(text, /Waiting for you \(4\)[\s\S]*B-0005 Item 5 \[plan, 5h\][\s\S]*asf decide B-0005 approve[\s\S]*B-0004 Item 4 \[review, 3h\]: decide on the change: src\/keys\//);
   assert.match(text, /Tokens: 1\.5k today/);
 });
 

@@ -6,7 +6,7 @@ import { notify } from '../notify.js';
 import { openProduct, runtimes, UsageError, type Product } from './context.js';
 import { acquire } from '../lock.js';
 import { approve } from './review.js';
-import { retro } from '../retro.js';
+import { decideLessons, retro } from '../retro.js';
 
 export interface RunOptions {
   item?: string;
@@ -63,12 +63,17 @@ async function buildAll(product: Product, ctx: EngineContext, opts: RunOptions):
   return outcomes;
 }
 
-/** After an item that needed more than one attempt or was rejected: the retro proposes lessons. It never changes the outcome. */
+/**
+ * After an item that needed more than one attempt or was rejected: the scrum master proposes lessons and the tech
+ * lead decides them. It never changes the outcome; a lesson the tech lead could not decide waits for the client.
+ */
 export async function learn(ctx: EngineContext, item: BacklogItem, outcome: ItemOutcome, log?: (msg: string) => void): Promise<void> {
   try {
-    for (const l of await retro(ctx, item, outcome)) log?.(`${l.id} ${l.status === 'proposed' ? 'proposed' : 'seen again'}: ${l.title}`);
+    const proposed = await retro(ctx, item, outcome);
+    for (const l of proposed) log?.(`${l.id} ${l.status === 'proposed' ? 'proposed' : 'seen again'}: ${l.title}`);
+    for (const l of await decideLessons({ ...ctx, log }, item, proposed)) log?.(`${l.id} ${l.status} by the tech lead${l.applied ? `: ${l.applied}` : ''}`);
   } catch (err) {
-    log?.(`retro: ${(err as Error).message}`);
+    log?.(`lessons: ${(err as Error).message}`);
   }
 }
 

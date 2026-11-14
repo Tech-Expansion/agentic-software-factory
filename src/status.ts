@@ -90,9 +90,9 @@ export function board(product: Product, now: Date = new Date()): Board {
     }
     if (!st) continue;
     if (st.state === 'plan-review')
-      decisions.push({ ...base, kind: 'plan', since: st.updated_at, what: 'approve the plan of a high-risk item', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `asf show ${item.id}, then asf decide ${item.id} approve`) });
+      decisions.push({ ...base, kind: 'plan', since: st.updated_at, what: st.reason ?? 'approve the plan of a high-risk item', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `asf show ${item.id}, then asf decide ${item.id} approve`) });
     else if (st.state === 'review')
-      decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `review the change; it touches ${st.flags.join(', ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.integration_branch ?? project.base_branch ?? 'main'}...${st.branch}, then asf decide ${item.id} approve`) });
+      decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `decide on the change: ${st.flags.join('; ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.integration_branch ?? project.base_branch ?? 'main'}...${st.branch}, then asf decide ${item.id} approve`) });
     else if (st.state === 'blocked')
       decisions.push({ ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf decide ${item.id} retry`) });
   }

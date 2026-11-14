@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/lesson-decisions.schema.json",
+  "title": "The tech lead's decision on each lesson the scrum master proposed",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decisions"],
+  "properties": {
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "decision", "reason"],
+        "properties": {
+          "id": { "type": "string", "description": "The lesson's id, for example L-3." },
+          "decision": { "enum": ["accept", "reject"] },
+          "reason": { "type": "string", "minLength": 1, "description": "Why, in one sentence." }
+        }
+      }
+    }
+  }
+}

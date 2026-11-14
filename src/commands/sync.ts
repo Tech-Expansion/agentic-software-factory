@@ -217,12 +217,12 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
     if (now && now !== link.shown) {
       await fresh(link);
       if (now === 'review') {
-        const flags = st?.flags?.length ? `\nIt touches paths that need your attention: ${st.flags.join(', ')}.` : '';
+        const flags = st?.flags?.length ? `\nIt needs your decision: ${st.flags.join('; ')}.` : '';
         await tracker.comment(link.key, `${MARK} ${item.id} is built and passed its checks and review, on branch ${st!.branch}.${flags}\n\n${st!.summary ?? ''}\n\nReply "/approve" to merge it, or "/reject <reason>" to send it back.`);
       } else if (now === 'blocked') {
         await tracker.comment(link.key, `${MARK} ${item.id} is blocked: ${st!.reason ?? 'unknown'}\n\nReply "/retry" to let it run again.`);
       } else if (now === 'plan') {
-        await tracker.comment(link.key, `${MARK} ${item.id} is high risk. This is the plan; nothing is built until you approve it.\n\n${st!.plan?.text ?? ''}\n\nReply "/approve" to build it this way, or "/reject <reason>" for a new plan.`);
+        await tracker.comment(link.key, `${MARK} ${item.id} is high risk, and the tech lead's plan needs your decision; nothing is built until you approve it.\n\n${st!.plan?.text ?? ''}\n\nReply "/approve" to build it this way, or "/reject <reason>" for a new plan.`);
       } else if (now === 'merged') {
         await tracker.comment(link.key, `${MARK} ${item.id} passed its checks and review and is merged into ${project.integration_branch}. It reaches ${base} with the next \`asf release\`.`);
       } else if (now === 'done') {

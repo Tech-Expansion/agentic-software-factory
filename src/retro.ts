@@ -1,6 +1,6 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { loadBacklog, type BacklogItem } from './backlog.js';
+import { loadBacklog, setStatus, type BacklogItem } from './backlog.js';
 import { modelFor, runtimeFor, validate, vendorSchema } from './config.js';
 import type { Product } from './commands/context.js';
 import { UsageError } from './commands/context.js';
@@ -28,6 +28,9 @@ export interface Lesson extends Omit<Proposed, 'recurs'> {
   /** What accepting it made: a backlog item, a line in the memory, a proposal file for the factory. */
   applied?: string;
   note?: string;
+  /** Who decided it: the tech lead after the retro, or the client, who can reverse the tech lead. */
+  decided_by?: 'tech-lead' | 'owner';
+  reason?: string;
 }
 
 const file = (factory: string) => join(factory, 'lessons.json');
@@ -123,23 +126,103 @@ export async function retro(ctx: EngineContext, item: BacklogItem, outcome: Item
   return touched;
 }
 
+/** The tech lead decides the lessons a retro proposed. One that is not decided, or fails to apply, stays for the client. */
+export async function decideLessons(ctx: EngineContext, item: BacklogItem, proposed: Lesson[]): Promise<Lesson[]> {
+  const { paths, project, policy } = ctx;
+  const open = proposed.filter((l) => l.status === 'proposed');
+  if (!open.length) return [];
+  const runtimeName = runtimeFor(project, 'tech-lead');
+  const worktree = join(paths.worktrees, item.id);
+  const failed = failures(readEvents(paths.runs), item.id);
+  const prompt = [
+    `## Item ${item.id}: ${item.title}`,
+    `## What went wrong\n\n${failed.slice(-6).map((e) => `- ${cut(e.detail, 800)}`).join('\n') || '- (see the lessons)'}`,
+    `## Proposed lessons\n\n${open.map((l) => `### ${l.id}: ${l.title}\n\nKind: ${l.scope} ${l.kind}${l.note ? ` (${l.note})` : ''}\n\nProblem: ${l.problem}\n\nProposal: ${l.proposal}`).join('\n\n')}`,
+  ].join('\n\n');
+  const result = await ctx.runtime(runtimeName).call({
+    cwd: existsSync(worktree) ? worktree : paths.root,
+    systemPrompt: systemPrompt('tech-lead', ['decide-lessons'], paths.factory),
+    prompt,
+    access: 'read',
+    model: modelFor(project, 'tech-lead'),
+    schema: vendorSchema('lesson-decisions'),
+    allowedCommands: [],
+    deniedCommands: policy.denied_commands,
+    protectedPaths: policy.protected_paths,
+    sandbox: policy.sandbox,
+  });
+  const errors = result.ok ? validate('lesson-decisions', result.structured) : [result.error ?? 'failed'];
+  appendEvent(paths.runs, {
+    at: new Date().toISOString(),
+    item: item.id,
+    step: 'lessons',
+    kind: 'agent',
+    role: 'tech-lead',
+    runtime: runtimeName,
+    model: modelFor(project, 'tech-lead'),
+    tokens: result.tokens,
+    duration_ms: result.durationMs,
+    outcome: errors.length ? 'error' : 'decided',
+    detail: errors.length ? errors.join('; ') : undefined,
+  });
+  if (errors.length) throw new Error(`the tech lead could not decide the lessons from ${item.id}: ${errors.join('; ')}`);
+  const out: Lesson[] = [];
+  for (const d of (result.structured as { decisions: { id: string; decision: 'accept' | 'reject'; reason: string }[] }).decisions) {
+    if (!open.some((l) => l.id === d.id)) continue;
+    try {
+      out.push(decideLesson(ctx, d.id, d.decision, { by: 'tech-lead', reason: d.reason }));
+    } catch (err) {
+      ctx.log?.(`${d.id} left for you: ${(err as Error).message}`);
+    }
+  }
+  return out;
+}
+
 /**
- * The owner's decision on a lesson. Accepting one never changes the policy: a check becomes a backlog item the team
- * builds like any other, a doc becomes a line in the project memory, and a factory lesson becomes a proposal for the
- * factory's own repository, to be measured with `asf eval` before it is adopted.
+ * A decision on a lesson: the tech lead's on a proposed one, or the client's, who may also reverse one already made.
+ * Accepting one never changes the policy: a check becomes a backlog item the team builds like any other, a doc becomes
+ * a line in the project memory, and a factory lesson becomes a proposal for the factory's own repository, to be
+ * measured with `asf eval` before it is adopted. Reversing an accepted one parks its backlog item, takes its line out
+ * of the memory, or deletes its proposal.
  */
-export function decideLesson(product: Product, id: string, decision: 'accept' | 'reject'): Lesson {
+export function decideLesson(product: Product, id: string, decision: 'accept' | 'reject', who: { by: 'tech-lead' | 'owner'; reason?: string } = { by: 'owner' }): Lesson {
   const { paths, project } = product;
   const lessons = loadLessons(paths.factory);
   const l = lessons.find((x) => x.id === id);
   if (!l) throw new UsageError(`no lesson ${id}`);
-  if (l.status !== 'proposed') throw new UsageError(`${id} is already ${l.status}`);
-  if (decision === 'reject') {
-    l.status = 'rejected';
-    saveLessons(paths.factory, lessons);
-    return l;
-  }
+  const wanted = decision === 'accept' ? 'accepted' : 'rejected';
+  if (l.status === wanted || (l.status !== 'proposed' && who.by !== 'owner')) throw new UsageError(`${id} is already ${l.status}`);
   const base = project.base_branch ?? 'main';
+  const onBase = () => {
+    if (currentBranch(paths.root) !== base || !isClean(paths.root)) throw new UsageError(`check out ${base} with a clean tree first; deciding ${id} commits to it`);
+  };
+  const decided = () => {
+    Object.assign(l, { decided_by: who.by, reason: who.reason });
+    saveLessons(paths.factory, lessons);
+    appendEvent(paths.runs, { at: new Date().toISOString(), item: l.items[0]!, step: 'lesson', kind: 'item', outcome: l.status, detail: `${l.id} by the ${who.by === 'owner' ? 'client' : 'tech lead'}${l.applied ? ` → ${l.applied}` : ''}` });
+    return l;
+  };
+  if (decision === 'reject') {
+    if (l.status === 'accepted' && l.applied) {
+      if (l.scope === 'factory') rmSync(l.applied, { force: true });
+      else if (l.kind === 'doc') {
+        onBase();
+        const memory = join(paths.memory, 'context.md');
+        const text = existsSync(memory) ? readFileSync(memory, 'utf8') : '';
+        writeFileSync(memory, text.split('\n').filter((line) => !line.endsWith(`(${l.id})`)).join('\n'));
+        commitFiles(paths.root, [memory], `docs(memory): drop ${l.id} ${l.title}\n`);
+      } else {
+        const it = loadBacklog(paths.backlog).items.find((i) => i.id === l.applied);
+        if (it && it.status !== 'done') {
+          onBase();
+          setStatus(it.file, 'draft');
+          commitFiles(paths.root, [it.file], `chore(backlog): park ${it.id}, lesson ${l.id} was rejected\n`);
+        }
+      }
+    }
+    l.status = 'rejected';
+    return decided();
+  }
   if (l.scope === 'factory') {
     const dir = join(factoryHome(), 'proposals');
     mkdirSync(dir, { recursive: true });
@@ -150,7 +233,7 @@ export function decideLesson(product: Product, id: string, decision: 'accept' | 
     );
     l.applied = out;
   } else {
-    if (currentBranch(paths.root) !== base || !isClean(paths.root)) throw new UsageError(`check out ${base} with a clean tree first; accepting ${id} commits to it`);
+    onBase();
     if (l.kind === 'doc') {
       const memory = join(paths.memory, 'context.md');
       mkdirSync(paths.memory, { recursive: true });
@@ -172,7 +255,5 @@ export function decideLesson(product: Product, id: string, decision: 'accept' | 
     }
   }
   l.status = 'accepted';
-  saveLessons(paths.factory, lessons);
-  appendEvent(paths.runs, { at: new Date().toISOString(), item: l.items[0]!, step: 'lesson', kind: 'item', outcome: 'accepted', detail: `${l.id} → ${l.applied}` });
-  return l;
+  return decided();
 }
