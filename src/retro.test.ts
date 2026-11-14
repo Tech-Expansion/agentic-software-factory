@@ -27,8 +27,8 @@ const lesson = (p: Partial<Proposed> = {}): Proposed => ({ title: 'Write hello.t
 type Decisions = { id: string; decision: 'accept' | 'reject'; reason: string }[];
 
 /**
- * The builder misses on its first attempt of each item when `miss` is set; the retro returns what it is given, and the
- * tech lead the decisions it is given (none by default, so the lessons wait for the client).
+ * The developer misses on its first attempt of each item when `miss` is set; the retro returns what it is given, and the
+ * tech lead the decisions it is given (none by default, so the lessons wait for the owner).
  */
 function team(lessons: Proposed[] | (() => Proposed[]), miss = true, decisions?: Decisions): Runtime & { calls: AgentCall[] } {
   const builds: Record<string, number> = {};
@@ -94,7 +94,7 @@ test('a second attempt gets a retro; an accepted check becomes a ready backlog i
   assert.throws(() => decideLesson(p, 'L-1', 'accept'), /already accepted/);
 });
 
-test('the tech lead decides the lessons, and the client can reverse a decision', async () => {
+test('the tech lead decides the lessons, and the owner can reverse a decision', async () => {
   item(1);
   const logs: string[] = [];
   const rt = team([lesson(), lesson({ kind: 'doc', title: 'Second' })], true, [
@@ -109,13 +109,13 @@ test('the tech lead decides the lessons, and the client can reverse a decision',
   const [l1, l2] = loadLessons(p.paths.factory);
   assert.deepEqual([l1?.status, l1?.decided_by, l1?.applied, l2?.status], ['accepted', 'tech-lead', 'B-0002', 'rejected']);
   assert.ok(logs.includes('L-1 accepted by the tech lead: B-0002'));
-  assert.deepEqual(board(p).decisions.map((d) => d.kind), ['review'], 'nothing about lessons waits for the client');
+  assert.deepEqual(board(p).decisions.map((d) => d.kind), ['review'], 'nothing about lessons waits for the owner');
 
   const back = decideLesson(p, 'L-1', 'reject');
   assert.deepEqual([back.status, back.decided_by], ['rejected', 'owner']);
   assert.match(readFileSync(join(root, 'backlog/0002-lesson-l-1.md'), 'utf8'), /status: draft/, 'its backlog item is parked');
   assert.match(git(root, ['log', '-1', '--format=%s']), /park B-0002, lesson L-1 was rejected/);
-  assert.equal(decideLesson(p, 'L-2', 'accept').status, 'accepted', 'the client can take a lesson the tech lead rejected');
+  assert.equal(decideLesson(p, 'L-2', 'accept').status, 'accepted', 'the owner can take a lesson the tech lead rejected');
   assert.match(readFileSync(join(root, '.factory/memory/context.md'), 'utf8'), /- Second\. .*\(L-2\)/);
   decideLesson(p, 'L-2', 'reject');
   assert.doesNotMatch(readFileSync(join(root, '.factory/memory/context.md'), 'utf8'), /\(L-2\)/, 'and take its line out again');

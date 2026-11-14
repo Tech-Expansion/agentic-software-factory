@@ -25,7 +25,7 @@ const q = (id: string, blocking: boolean, extra: Partial<Record<string, unknown>
   ...extra,
 });
 
-function analyst(...answers: unknown[]): Runtime & { calls: AgentCall[] } {
+function productOwner(...answers: unknown[]): Runtime & { calls: AgentCall[] } {
   const calls: AgentCall[] = [];
   return {
     name: 'claude-code',
@@ -56,13 +56,13 @@ beforeEach(() => {
 
 test('a new item is not built; blocking questions keep it new until the owner answers', async () => {
   assert.deepEqual(await run({ context: { runtime: () => assert.fail('nothing may be built') } }), []);
-  const rt = analyst({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', false, { question: 'Q2: dark mode?' })], assumptions: ['preprod only'] });
+  const rt = productOwner({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', false, { question: 'Q2: dark mode?' })], assumptions: ['preprod only'] });
   const [out] = await clarify({ context: { runtime: () => rt } });
   assert.deepEqual(out, { id: 'B-0001', open: 1, ready: false });
   const call = rt.calls[0]!;
   assert.equal(call.access, 'read');
   assert.equal(realpathSync(call.cwd), realpathSync(root));
-  assert.ok(call.schema, 'the analyst answers in the analysis schema');
+  assert.ok(call.schema, 'the product owner answers in the analysis schema');
   assert.match(call.prompt, /Requirement B-0001: A wallet[\s\S]*multi-sig/);
   assert.match(readFileSync(item, 'utf8'), /status: new/);
   assert.match(questions(), /Q1 \[blocking\] Q1: which platform\?[\s\S]*- mobile[\s\S]*recommended: web \(it decides the stack\)[\s\S]*Q2 Q2: dark mode/);
@@ -80,14 +80,14 @@ test('a new item is not built; blocking questions keep it new until the owner an
 });
 
 test('an item with nothing blocking is ready at once', async () => {
-  const rt = analyst({ understood: 'Clear.', questions: [q('Q1', false)], assumptions: [] });
+  const rt = productOwner({ understood: 'Clear.', questions: [q('Q1', false)], assumptions: [] });
   const [out] = await clarify({ context: { runtime: () => rt } });
   assert.equal(out?.ready, true);
   assert.match(readFileSync(item, 'utf8'), /status: ready[\s\S]*web \(assumed, not asked\)/);
 });
 
 test('--accept takes the recommendations; a dirty checkout keeps the item new', async () => {
-  const rt = analyst({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] });
+  const rt = productOwner({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] });
   await clarify({ context: { runtime: () => rt } });
   writeFileSync(join(root, 'AGENTS.md'), 'changed by the owner\n');
   const dirty = answer('B-0001', undefined, '', { accept: true });
@@ -102,7 +102,7 @@ test('--accept takes the recommendations; a dirty checkout keeps the item new', 
 });
 
 test('asking again keeps what the owner answered and never reuses its ids', async () => {
-  const rt = analyst(
+  const rt = productOwner(
     { understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] },
     { understood: 'A mobile wallet.', questions: [q('Q1', true, { question: 'Q1: which network?' })], assumptions: [] },
   );
@@ -115,17 +115,17 @@ test('asking again keeps what the owner answered and never reuses its ids', asyn
   assert.deepEqual(again, { id: 'B-0001', open: 1, ready: false });
   const [skipped] = await clarify({ context: { runtime: () => rt } });
   assert.match(skipped!.note!, /already asked/);
-  assert.equal(rt.calls.length, 2, 'no new analyst call without --again');
+  assert.equal(rt.calls.length, 2, 'no new product owner call without --again');
 });
 
 test('an analysis that breaks the contract is refused', async () => {
-  await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [q('Q1', true), q('Q1', false)], assumptions: [] }) } }), /not unique/);
-  await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /product owner failed/);
+  await assert.rejects(clarify({ context: { runtime: () => productOwner({ understood: 'x', questions: [q('Q1', true), q('Q1', false)], assumptions: [] }) } }), /not unique/);
+  await assert.rejects(clarify({ context: { runtime: () => productOwner({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /product owner failed/);
   assert.equal(loadClarification(join(root, '.factory'), 'B-0001'), undefined);
 });
 
 test('a small item is built with the quick workflow, unless it is high risk', async () => {
-  const rt = analyst({ understood: 'Fix a typo.', questions: [], assumptions: [], size: 'small' });
+  const rt = productOwner({ understood: 'Fix a typo.', questions: [], assumptions: [], size: 'small' });
   await clarify({ context: { runtime: () => rt } });
   assert.match(readFileSync(item, 'utf8'), /^---\nid: B-0001\ntitle: A wallet\nstatus: ready\nworkflow: quick\n---\n/);
   assert.match(git(root, ['log', '-1', '--format=%b']), /Small: built with the quick workflow/);
@@ -138,7 +138,7 @@ test('a small item is built with the quick workflow, unless it is high risk', as
 
 test('asf decide answers, accepts and refuses what it does not know', async () => {
   const { decide } = await import('./commands/decide.js');
-  const rt = analyst({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] });
+  const rt = productOwner({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] });
   await clarify({ context: { runtime: () => rt } });
   assert.match(decide('B-0001', ['Q1', 'mobile,', 'iOS', 'first']), /1 blocking question\(s\) open/);
   assert.match(decide('B-0001', ['accept']), /B-0001 is ready to build/);

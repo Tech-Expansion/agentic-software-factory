@@ -61,7 +61,7 @@
       }
     },
     "gaps": {
-      "description": "clarify: what the requirement leaves open. The analyst never sees this list.",
+      "description": "clarify: what the requirement leaves open. The product owner never sees this list.",
       "type": "array",
       "minItems": 1,
       "items": {

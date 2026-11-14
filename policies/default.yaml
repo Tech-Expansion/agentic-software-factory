@@ -2,7 +2,7 @@
 # adds the hosts a product needs. The owner edits that file; agents cannot (it is under .factory/).
 max_attempts: 3
 max_tokens_per_item: 3000000
-# Times a builder on Claude Code is sent back by the checks before it may finish (a Stop hook). 0 turns it off.
+# Times a developer on Claude Code is sent back by the checks before it may finish (a Stop hook). 0 turns it off.
 check_rounds_in_session: 3
 denied_commands:
   - git push
@@ -36,9 +36,9 @@ approval_paths:
   - "**/helm/**"
   - "**/docker-compose*"
   - "**/compose.y*ml"
-# A change here waits for the client however it was reviewed: it cannot be undone once it runs. Add globs to keep
-# the client's own approval on anything else (for example "**/package.json").
-client_paths:
+# A change here waits for the owner however it was reviewed: it cannot be undone once it runs. Add globs to keep
+# the owner's own approval on anything else (for example "**/package.json").
+owner_paths:
   - "**/migrations/**"
 # Unattended runs may not change these. Planning them is done with the user, in `asf discover`.
 protected_paths:
@@ -49,7 +49,7 @@ protected_paths:
   - "backlog/**"
 # Keys, signing, money, auth: never built without acceptance tests first; the security reviewer checks them when it is on.
 sensitive_paths: []
-# Test files. Deleting one, or adding a skip to one, sends the item back to the builder.
+# Test files. Deleting one, or adding a skip to one, sends the item back to the developer.
 test_paths:
   - "**/*.test.*"
   - "**/*.spec.*"

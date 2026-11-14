@@ -10,10 +10,10 @@
     "files": { "type": "array", "items": { "type": "string" }, "description": "Files to add or change." },
     "tests": { "type": "array", "items": { "type": "string" }, "description": "How each criterion and each risk will be tested." },
     "risks": { "type": "array", "items": { "type": "string" }, "description": "What could go wrong, and how the plan prevents it." },
-    "client_decisions": {
+    "owner_decisions": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Decisions the plan needs from the client, in their words with the options and a recommendation: a new cost, something that cannot be undone, a change to the agreed architecture. Empty when the tech lead can decide everything; then the build starts at once."
+      "description": "Decisions the plan needs from the owner, in their words with the options and a recommendation: a new cost, something that cannot be undone, a change to the agreed architecture. Empty when the tech lead can decide everything; then the build starts at once."
     }
   }
 }

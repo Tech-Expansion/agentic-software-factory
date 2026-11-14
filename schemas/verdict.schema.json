@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/verdict.schema.json",
-  "title": "Verdict returned by a verifier step",
+  "title": "Verdict returned by a review step",
   "type": "object",
   "additionalProperties": false,
   "required": ["verdict", "criteria", "findings", "summary"],
@@ -36,7 +36,7 @@
     "escalate": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Decisions that are the client's, one line each in their words: a new cost, something that cannot be undone, a change to the agreed architecture. They do not fail the change; it waits for the client."
+      "description": "Decisions that are the owner's, one line each in their words: a new cost, something that cannot be undone, a change to the agreed architecture. They do not fail the change; it waits for the owner."
     }
   }
 }

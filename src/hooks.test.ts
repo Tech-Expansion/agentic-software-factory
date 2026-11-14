@@ -21,7 +21,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'asf-product-'));
 });
 
-test('the stop check sends the builder back while the checks fail, at most max times', () => {
+test('the stop check sends the developer back while the checks fail, at most max times', () => {
   const cfg = { cwd: root, commands: ['test -f done.txt'], max: 2, counter: join(root, 'count.json') };
   const first = stopCheck(cfg);
   assert.equal(first.block, true);
@@ -46,7 +46,7 @@ test('as a hook process it answers in the format Claude Code reads', () => {
   assert.equal(again.stdout, '', 'after max rounds it lets the agent stop');
 });
 
-/** Stands in for Claude Code: when the builder is done, it runs the Stop hook, and goes on while it blocks. */
+/** Stands in for Claude Code: when the developer is done, it runs the Stop hook, and goes on while it blocks. */
 function claudeWithHooks(): Runtime & { calls: AgentCall[]; reasons: string[] } {
   const rt = {
     name: 'claude-code' as const,

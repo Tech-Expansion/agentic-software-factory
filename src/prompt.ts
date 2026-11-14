@@ -51,7 +51,7 @@ export interface ItemContext {
   feedback?: string;
   checks?: string;
   diff?: string;
-  /** Acceptance tests written before the build, which the builder cannot change. */
+  /** Acceptance tests written before the build, which the developer cannot change. */
   lockedTests?: string[];
   /** The approved plan, for a high-risk item. */
   plan?: string;
@@ -101,7 +101,7 @@ export interface ClarifyContext {
   previous?: { questions: { id: string; question: string }[]; answers: Record<string, { answer: string }> };
 }
 
-/** The analyst's input: the requirement, the product around it, and what the owner already answered. */
+/** The product owner's input: the requirement, the product around it, and what the owner already answered. */
 export function clarifyPrompt(c: ClarifyContext): string {
   const { project, item } = c;
   const out: string[] = [`# Product: ${project.name} (stage: ${project.stage})`];

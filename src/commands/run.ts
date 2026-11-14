@@ -65,7 +65,7 @@ async function buildAll(product: Product, ctx: EngineContext, opts: RunOptions):
 
 /**
  * After an item that needed more than one attempt or was rejected: the scrum master proposes lessons and the tech
- * lead decides them. It never changes the outcome; a lesson the tech lead could not decide waits for the client.
+ * lead decides them. It never changes the outcome; a lesson the tech lead could not decide waits for the owner.
  */
 export async function learn(ctx: EngineContext, item: BacklogItem, outcome: ItemOutcome, log?: (msg: string) => void): Promise<void> {
   try {

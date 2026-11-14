@@ -12,4 +12,4 @@ You get the item, what went wrong on it, and the lessons proposed from it.
 3. Return one decision per lesson, as the JSON the schema asks for, each with its reason in one sentence.
 
 Accepting a lesson never changes the policy: a check becomes a backlog item, a doc a line in the product memory, and a
-factory lesson a proposal measured before it is adopted. The client can reverse any decision.
+factory lesson a proposal measured before it is adopted. The owner can reverse any decision.

@@ -56,7 +56,7 @@ export interface Policy {
   check_rounds_in_session: number;
   denied_commands: string[];
   approval_paths: string[];
-  client_paths: string[];
+  owner_paths: string[];
   protected_paths: string[];
   sensitive_paths: string[];
   test_paths: string[];
@@ -134,7 +134,7 @@ export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbo
     check_rounds_in_session: Math.min(base.check_rounds_in_session ?? 0, override.check_rounds_in_session ?? Infinity),
     denied_commands: union(base.denied_commands, override.denied_commands),
     approval_paths: union(base.approval_paths, override.approval_paths),
-    client_paths: union(base.client_paths ?? [], override.client_paths),
+    owner_paths: union(base.owner_paths ?? [], override.owner_paths),
     protected_paths: union(base.protected_paths, override.protected_paths),
     sensitive_paths: union(base.sensitive_paths, override.sensitive_paths),
     test_paths: union(base.test_paths, override.test_paths),
@@ -167,7 +167,7 @@ export function modelFor(project: ProjectConfig, role: string): string | undefin
 /**
  * Specialists the product's own settings call for and that are not on: the security reviewer once there are
  * sensitive paths (keys, signing, money, auth), the UX designer once there is a `ui` path list. The team suggests;
- * the client turns one on by adding it to `specialists:`.
+ * the owner turns one on by adding it to `specialists:`.
  */
 export function suggestedSpecialists(project: ProjectConfig, policy: Policy): { role: string; why: string }[] {
   const on = new Set(project.specialists ?? []);

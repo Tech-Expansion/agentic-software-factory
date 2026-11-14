@@ -1,6 +1,6 @@
 ---
 name: plan-backlog
-description: Split approved specs into backlog items the builder can do in one unattended run.
+description: Split approved specs into backlog items the developer can do in one unattended run.
 ---
 
 One file per item in `backlog/NNNN-<slug>.md`:

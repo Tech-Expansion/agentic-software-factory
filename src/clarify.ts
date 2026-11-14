@@ -48,8 +48,8 @@ export function saveClarification(factory: string, c: Clarification): void {
 export const openQuestions = (c: Clarification) => c.questions.filter((q) => q.blocking && !c.answers[q.id]);
 
 /**
- * The section added to the item once it is clear: every question with its answer (or the recommendation the analyst
- * would follow, for one that did not block), and the analyst's assumptions. Tester, builder and verifier read it as
+ * The section added to the item once it is clear: every question with its answer (or the recommendation the product owner
+ * would follow, for one that did not block), and the product owner's assumptions. QA and the developer read it as
  * part of the item.
  */
 export function decisionsSection(c: Clarification): string {
@@ -64,7 +64,7 @@ export function decisionsSection(c: Clarification): string {
 }
 
 /**
- * Runs the analyst on one item, read-only in the product root. Unique question ids are part of the contract: the
+ * Runs the product owner on one item, read-only in the product root. Unique question ids are part of the contract: the
  * owner answers by id.
  */
 export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: Clarification): Promise<Clarification> {
