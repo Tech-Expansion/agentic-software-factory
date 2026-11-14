@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -10,7 +10,7 @@ import { findSecrets, testTampering } from './integrity.js';
 import { claudeArgs, parseClaudeOutput } from './runtimes/claude.js';
 import { codexEnv } from './runtimes/codex.js';
 import type { AgentCall } from './runtimes/types.js';
-import { hasSrt, scrubEnv } from './sandbox.js';
+import { claudeSandbox, hasSrt, scrubEnv, srtSettings, toolchainEnv } from './sandbox.js';
 
 const policy = loadDefaultPolicy();
 
@@ -41,6 +41,36 @@ test('checks in the sandbox cannot read credentials or reach other hosts', { ski
   assert.equal(net?.ok, false, 'no network beyond the allowlist');
   const [write] = runChecks(dir, ['echo ok > out.txt && test -s out.txt'], policy.sandbox);
   assert.equal(write?.ok, true, write?.output);
+});
+
+test('checks and agent commands may write to /tmp under its resolved path too', () => {
+  const real = realpathSync('/tmp');
+  for (const settings of [srtSettings(policy.sandbox), claudeSandbox(policy.sandbox)] as { filesystem: { allowWrite: string[] } }[]) {
+    assert.ok(settings.filesystem.allowWrite.includes('/tmp'));
+    assert.ok(settings.filesystem.allowWrite.includes(real), `${real} is writable`);
+  }
+});
+
+test('node in the sandbox uses its bundled CA list, not the OS trust store it cannot reach', () => {
+  assert.equal(toolchainEnv(policy.sandbox).NODE_USE_SYSTEM_CA, '0');
+});
+
+test('checks in the sandbox can reach the npm registry over TLS', { skip: !hasSrt() && 'srt is not installed' }, () => {
+  const saved = process.env.NODE_USE_SYSTEM_CA;
+  process.env.NODE_USE_SYSTEM_CA = '1';
+  try {
+    const [r] = runChecks(tmpdir(), ['npm view semver version'], policy.sandbox);
+    assert.equal(r?.ok, true, r?.output);
+  } finally {
+    if (saved === undefined) delete process.env.NODE_USE_SYSTEM_CA;
+    else process.env.NODE_USE_SYSTEM_CA = saved;
+  }
+});
+
+test('checks in the sandbox can write to /tmp', { skip: !hasSrt() && 'srt is not installed' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'asf-sbx-'));
+  const [r] = runChecks(dir, ['f=$(mktemp /tmp/asf-probe.XXXXXX) && rm "$f"'], policy.sandbox);
+  assert.equal(r?.ok, true, r?.output);
 });
 
 const call = (over: Partial<AgentCall> = {}): AgentCall => ({

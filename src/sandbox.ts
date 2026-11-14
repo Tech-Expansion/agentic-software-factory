@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SandboxPolicy } from './config.js';
@@ -28,14 +28,32 @@ export function scrubEnv(env: NodeJS.ProcessEnv, secretNames: string[]): NodeJS.
  * reason.
  */
 export function toolchainEnv(_sb: SandboxPolicy): Record<string, string> {
-  return {};
+  // Node reads the OS trust store when NODE_USE_SYSTEM_CA=1 is inherited; on macOS that goes through the keychain
+  // and trustd, which the sandbox blocks, so every HTTPS request (npm install, fetch) fails its certificate check.
+  // Node's bundled CA list needs neither.
+  return { NODE_USE_SYSTEM_CA: '0' };
+}
+
+/**
+ * /tmp, plus the path it links to. The sandbox matches resolved paths, so on macOS, where /tmp links to
+ * /private/tmp, granting '/tmp' alone grants nothing. Tools that hardcode /tmp (pnpm 12 keeps its store lock in
+ * /tmp/pnpm-store-operation-locks-<uid>) then fail with "Operation not permitted".
+ */
+export function tmpRoots(): string[] {
+  let real = '/tmp';
+  try {
+    real = realpathSync('/tmp');
+  } catch {
+    // No /tmp: nothing to resolve.
+  }
+  return [...new Set(['/tmp', real])];
 }
 
 /** Settings for Anthropic's sandbox runtime (`srt`), which wraps the runner's own checks. */
 export function srtSettings(sb: SandboxPolicy): object {
   return {
     network: { allowedDomains: sb.network_allow, deniedDomains: [], allowLocalBinding: sb.local_binding },
-    filesystem: { denyRead: sb.deny_read, allowWrite: ['.', tmpdir(), '/tmp', ...sb.write_allow], denyWrite: [] },
+    filesystem: { denyRead: sb.deny_read, allowWrite: ['.', tmpdir(), ...tmpRoots(), ...sb.write_allow], denyWrite: [] },
     credentials: { envVars: sb.secret_env.map((name) => ({ name, mode: 'deny' })) },
   };
 }
@@ -48,7 +66,7 @@ export function claudeSandbox(sb: SandboxPolicy): object {
     allowUnsandboxedCommands: false,
     autoAllowBashIfSandboxed: true,
     network: { allowedDomains: sb.network_allow, allowLocalBinding: sb.local_binding },
-    filesystem: { denyRead: sb.deny_read, allowWrite: [tmpdir(), ...sb.write_allow] },
+    filesystem: { denyRead: sb.deny_read, allowWrite: [tmpdir(), ...tmpRoots(), ...sb.write_allow] },
     credentials: { envVars: sb.secret_env.map((name) => ({ name, mode: 'deny' })) },
   };
 }
