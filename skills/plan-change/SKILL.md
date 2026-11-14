@@ -10,3 +10,7 @@ description: Write a short, reviewable plan for a high-risk item before it is bu
 4. For each criterion and each risk, say which test will show it. Include the failure cases: wrong key, missing
    signature, expired validity, insufficient funds.
 5. Keep it under a page.
+6. Decide the technical questions yourself. Put in `client_decisions` only what is the client's to decide: a new
+   cost (a paid service, a vendor, an account), something that cannot be undone, or a change to the architecture the
+   client agreed to. One line each, in their words, with the options and what you recommend. Leave it empty
+   otherwise: the build then starts on your plan without waiting.

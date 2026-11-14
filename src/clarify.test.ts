@@ -120,6 +120,30 @@ test('asking again keeps what the owner answered and never reuses its ids', asyn
 
 test('an analysis that breaks the contract is refused', async () => {
   await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [q('Q1', true), q('Q1', false)], assumptions: [] }) } }), /not unique/);
-  await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /analyst failed/);
+  await assert.rejects(clarify({ context: { runtime: () => analyst({ understood: 'x', questions: [{ id: 'Q1' }], assumptions: [] }) } }), /product owner failed/);
   assert.equal(loadClarification(join(root, '.factory'), 'B-0001'), undefined);
+});
+
+test('a small item is built with the quick workflow, unless it is high risk', async () => {
+  const rt = analyst({ understood: 'Fix a typo.', questions: [], assumptions: [], size: 'small' });
+  await clarify({ context: { runtime: () => rt } });
+  assert.match(readFileSync(item, 'utf8'), /^---\nid: B-0001\ntitle: A wallet\nstatus: ready\nworkflow: quick\n---\n/);
+  assert.match(git(root, ['log', '-1', '--format=%b']), /Small: built with the quick workflow/);
+
+  writeFileSync(item, '---\nid: B-0001\ntitle: A wallet\nstatus: new\nrisk: high\n---\nSign with the gate key.\n');
+  git(root, ['commit', '-qam', 'risky']);
+  await clarify({ again: true, context: { runtime: () => rt } });
+  assert.doesNotMatch(readFileSync(item, 'utf8'), /workflow:/, 'a high-risk item keeps feature');
+});
+
+test('asf decide answers, accepts and refuses what it does not know', async () => {
+  const { decide } = await import('./commands/decide.js');
+  const rt = analyst({ understood: 'A wallet.', questions: [q('Q1', true), q('Q2', true)], assumptions: [] });
+  await clarify({ context: { runtime: () => rt } });
+  assert.match(decide('B-0001', ['Q1', 'mobile,', 'iOS', 'first']), /1 blocking question\(s\) open/);
+  assert.match(decide('B-0001', ['accept']), /B-0001 is ready to build/);
+  assert.match(readFileSync(item, 'utf8'), /Q1: which platform\? mobile, iOS first/);
+  assert.throws(() => decide('B-0001', ['maybe']), /asf decide <item> approve/);
+  assert.throws(() => decide('X-1', ['accept']), /not an item \(B-0001\) or a lesson/);
+  assert.throws(() => decide('L-9', ['accept']), /no lesson L-9/);
 });

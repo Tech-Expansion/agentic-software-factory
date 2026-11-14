@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { BacklogItem } from './backlog.js';
-import { runtimeFor, validate, vendorSchema } from './config.js';
+import { modelFor, runtimeFor, validate, vendorSchema } from './config.js';
 import type { EngineContext } from './engine.js';
 import { clarifyPrompt, systemPrompt } from './prompt.js';
 import { appendEvent, saveTranscript } from './runlog.js';
@@ -16,11 +16,13 @@ export interface Question {
   blocking: boolean;
 }
 
-/** What the analyst returns. */
+/** What the product owner returns. */
 export interface Analysis {
   understood: string;
   questions: Question[];
   assumptions: string[];
+  /** small: one clear change with nothing to decide, built through the quick workflow. */
+  size?: 'small' | 'normal';
 }
 
 export interface Clarification extends Analysis {
@@ -67,13 +69,13 @@ export function decisionsSection(c: Clarification): string {
  */
 export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: Clarification): Promise<Clarification> {
   const { paths, project, policy } = ctx;
-  const runtimeName = runtimeFor(project, 'analyst');
+  const runtimeName = runtimeFor(project, 'product-owner');
   const result = await ctx.runtime(runtimeName).call({
     cwd: paths.root,
-    systemPrompt: systemPrompt('analyst', ['clarify-requirement']),
+    systemPrompt: systemPrompt('product-owner', ['clarify-requirement'], paths.factory),
     prompt: clarifyPrompt({ root: paths.root, project, item, previous: previous && { questions: previous.questions, answers: previous.answers } }),
     access: 'read',
-    model: project.models?.analyst,
+    model: modelFor(project, 'product-owner'),
     schema: vendorSchema('analysis'),
     allowedCommands: [],
     deniedCommands: policy.denied_commands,
@@ -90,9 +92,9 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
     item: item.id,
     step: 'clarify',
     kind: 'agent',
-    role: 'analyst',
+    role: 'product-owner',
     runtime: runtimeName,
-    model: project.models?.analyst,
+    model: modelFor(project, 'product-owner'),
     tokens: result.tokens,
     cost_usd: result.costUsd,
     duration_ms: result.durationMs,
@@ -100,7 +102,7 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
     detail: errors.length ? errors.join('; ') : undefined,
     denied: result.denied,
   });
-  if (errors.length) throw new Error(`the analyst failed on ${item.id}: ${errors.join('; ')}`);
+  if (errors.length) throw new Error(`the product owner failed on ${item.id}: ${errors.join('; ')}`);
   // Answered questions stay; new ones never take an id the owner has already answered.
   const kept = previous ? previous.questions.filter((q) => previous.answers[q.id]) : [];
   const used = new Set(kept.map((q) => q.id));
@@ -112,5 +114,5 @@ export async function analyze(ctx: EngineContext, item: BacklogItem, previous?: 
     return { ...q, id: `Q${n}` };
   });
   const answers = Object.fromEntries(kept.map((q) => [q.id, previous!.answers[q.id]!]));
-  return { item: item.id, at: new Date().toISOString(), understood: a!.understood, questions: [...kept, ...fresh], assumptions: a!.assumptions, answers };
+  return { item: item.id, at: new Date().toISOString(), understood: a!.understood, questions: [...kept, ...fresh], assumptions: a!.assumptions, size: a!.size, answers };
 }

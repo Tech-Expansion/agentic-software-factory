@@ -7,3 +7,4 @@
 .factory/lock
 .factory/serve.json
 .factory/lessons.json
+.factory/deploys.json

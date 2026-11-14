@@ -48,7 +48,7 @@ function agents(): Runtime {
     name: 'claude-code',
     async call(c: AgentCall): Promise<AgentResult> {
       const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
-      if (c.systemPrompt.includes('You are the analyst')) {
+      if (c.systemPrompt.includes('You are the product owner')) {
         const structured = { understood: 'A wallet.', questions: [{ id: 'Q1', question: 'Which platform?', why: 'stack', options: ['web', 'mobile'], recommendation: 'web', blocking: true }], assumptions: [] };
         return { ok: true, text: '', structured, tokens, durationMs: 1 };
       }
@@ -175,4 +175,10 @@ test('jira over acli: the owner’s tickets only, text from ADF, plain flags', a
   assert.equal(adfToText('plain'), 'plain');
   const failing = jira({ kind: 'jira', project: 'AI', owner: OWNER }, async () => ({ code: 1, stdout: '', stderr: 'not logged in' }));
   await assert.rejects(failing.intake(), /not logged in/);
+});
+
+test('the label asf-<name> on a ticket picks the workflow its item is built with', async () => {
+  const j = memory([{ key: 'AI-8', title: 'Fix a typo', body: 'Typo in the README.', status: 'To Do', labels: ['cardano-wallet', 'asf-quick'], reporter: OWNER }]);
+  await sync({ tracker: j.tracker });
+  assert.match(readFileSync(join(root, 'backlog/0001-fix-a-typo.md'), 'utf8'), /tracker: AI-8\nworkflow: quick\n---/);
 });

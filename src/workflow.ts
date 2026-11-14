@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { factoryRoot } from './paths.js';
@@ -15,6 +15,14 @@ export interface AgentStep {
    * commits them, and later steps cannot change them.
    */
   scope?: 'tests';
+  /**
+   * Runs only when the change calls for it: a reviewer brought in like a specialist. `touches` holds globs, or names
+   * of path lists: `sensitive` and `approval` from the policy, or any list under `paths:` in project.yaml. The step
+   * runs if a changed file matches, or if the item has the given `risk`. Read-only steps only.
+   */
+  when?: { touches?: string[]; risk?: 'high' };
+  /** A specialist's review: runs only for a product that lists the role under `specialists:` in project.yaml. */
+  specialist?: boolean;
 }
 
 export interface ChecksStep {
@@ -30,11 +38,14 @@ export interface Workflow {
 }
 
 /**
- * Loads `workflows/<name>.yaml`, or a workflow file by path. `without` drops steps by id, to measure with `asf eval`
- * what a step is worth. A failing step sends the item back to the first step with feedback.
+ * Loads a workflow by name, or a workflow file by path. A product's `.factory/workflows/<name>.yaml` (`local` is the
+ * product's .factory directory) replaces the factory's `workflows/<name>.yaml`. `without` drops steps by id, to
+ * measure with `asf eval` what a step is worth. A failing step sends the item back to the first step with feedback.
  */
-export function loadWorkflow(name: string, without: string[] = []): Workflow {
-  const file = name.endsWith('.yaml') ? resolve(name) : join(factoryRoot, 'workflows', `${name}.yaml`);
+export function loadWorkflow(name: string, without: string[] = [], local?: string): Workflow {
+  const own = local && join(local, 'workflows', `${name}.yaml`);
+  const file = name.endsWith('.yaml') ? resolve(name) : own && existsSync(own) ? own : join(factoryRoot, 'workflows', `${name}.yaml`);
+  if (!existsSync(file)) throw new Error(`unknown workflow: ${name}`);
   const wf = parse(readFileSync(file, 'utf8')) as Workflow;
   const missing = without.filter((id) => !wf?.steps?.some((s) => s.id === id));
   if (missing.length) throw new Error(`workflow ${name} has no step ${missing.join(', ')}`);
@@ -45,6 +56,8 @@ export function loadWorkflow(name: string, without: string[] = []): Workflow {
   for (const s of wf.steps as Step[]) {
     if (s.kind !== 'agent' && s.kind !== 'checks') throw new Error(`workflow ${name}: unknown step kind in ${(s as Step).id}`);
     if (s.kind === 'agent' && (!s.role || !Array.isArray(s.skills))) throw new Error(`workflow ${name}: ${s.id} needs role and skills`);
+    if (s.kind === 'agent' && s.when && s.access !== 'read') throw new Error(`workflow ${name}: ${s.id} has \`when\`, which only a read-only step may have`);
+    if (s.kind === 'agent' && s.specialist && s.access !== 'read') throw new Error(`workflow ${name}: ${s.id} is a specialist's review, which must be read-only`);
     if (s.kind === 'agent' && s.scope === 'tests' && (s !== wf.steps[0] || s.access !== 'write')) {
       throw new Error(`workflow ${name}: a tests step must be the first step, with write access`);
     }
@@ -53,3 +66,6 @@ export function loadWorkflow(name: string, without: string[] = []): Workflow {
   if (rest[0]?.kind !== 'agent' || rest[0].access !== 'write') throw new Error(`workflow ${name}: the build must start with an agent step with write access`);
   return wf;
 }
+
+/** True when the workflow writes acceptance tests, from the criteria, before the build. */
+export const writesTests = (wf: Workflow) => wf.steps.some((s) => s.kind === 'agent' && s.scope === 'tests');

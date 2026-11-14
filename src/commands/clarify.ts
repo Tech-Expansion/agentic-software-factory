@@ -1,5 +1,5 @@
 import { appendFileSync, readFileSync } from 'node:fs';
-import { loadBacklog, setStatus, subject, type BacklogItem } from '../backlog.js';
+import { addField, loadBacklog, setStatus, subject, type BacklogItem } from '../backlog.js';
 import { analyze, decisionsSection, loadClarification, openQuestions, saveClarification, type Clarification } from '../clarify.js';
 import type { EngineContext } from '../engine.js';
 import { commitFiles, currentBranch, isClean } from '../git.js';
@@ -29,12 +29,19 @@ function makeReady(product: Product, item: BacklogItem, c: Clarification): Clari
   const { root } = product.paths;
   const base = product.project.base_branch ?? 'main';
   const out = { id: item.id, open: 0, ready: false };
-  if (currentBranch(root) !== base) return { ...out, note: `check out ${base} and run \`asf answer ${item.id} --accept\` to make it ready` };
-  if (!isClean(root)) return { ...out, note: `commit or stash your changes, then run \`asf answer ${item.id} --accept\` to make it ready` };
+  if (currentBranch(root) !== base) return { ...out, note: `check out ${base} and run \`asf decide ${item.id} accept\` to make it ready` };
+  if (!isClean(root)) return { ...out, note: `commit or stash your changes, then run \`asf decide ${item.id} accept\` to make it ready` };
   const text = readFileSync(item.file, 'utf8');
   appendFileSync(item.file, `${text.endsWith('\n') ? '' : '\n'}\n${decisionsSection(c)}\n`);
   setStatus(item.file, 'ready');
-  commitFiles(root, [item.file], `${subject(item, `chore(backlog): ${item.id} is clear to build`)}\n\nClarified with the owner: ${Object.keys(c.answers).length} answer(s).\n`);
+  // A small item skips the tests written first, unless the item, the product or its risk already settle the workflow.
+  const quick = c.size === 'small' && !item.workflow && item.risk !== 'high' && (product.project.workflow ?? 'feature') === 'feature';
+  if (quick) addField(item.file, 'workflow', 'quick');
+  commitFiles(
+    root,
+    [item.file],
+    `${subject(item, `chore(backlog): ${item.id} is clear to build`)}\n\nClarified with the owner: ${Object.keys(c.answers).length} answer(s).${quick ? ' Small: built with the quick workflow.' : ''}\n`,
+  );
   return { ...out, ready: true };
 }
 
@@ -48,7 +55,7 @@ export interface ClarifyOptions {
   context?: Partial<EngineContext>;
 }
 
-/** Runs the analyst on new items (or one), and makes each ready that has nothing blocking left. */
+/** Runs the product owner on new items (or one), and makes each ready that has nothing blocking left. */
 export async function clarify(opts: ClarifyOptions = {}): Promise<ClarifyOutcome[]> {
   const product = openProduct(opts.root);
   const log = opts.log ?? (() => {});
@@ -61,10 +68,10 @@ export async function clarify(opts: ClarifyOptions = {}): Promise<ClarifyOutcome
     if (item.status !== 'new') throw new UsageError(`${item.id} is ${item.status}; only new items are clarified`);
     const previous = loadClarification(product.paths.factory, item.id);
     if (previous && !opts.again) {
-      outcomes.push({ id: item.id, open: openQuestions(previous).length, ready: false, note: 'already asked; answer with `asf answer`, or use --again' });
+      outcomes.push({ id: item.id, open: openQuestions(previous).length, ready: false, note: 'already asked; answer with `asf decide`, or use --again' });
       continue;
     }
-    log(`${item.id}: asking the analyst`);
+    log(`${item.id}: asking the product owner`);
     const c = await analyze(ctx, item, previous);
     saveClarification(product.paths.factory, c);
     const open = openQuestions(c).length;

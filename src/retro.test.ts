@@ -24,8 +24,13 @@ const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
 const pass = { verdict: 'pass', criteria: [], findings: [], summary: 'good' };
 const lesson = (p: Partial<Proposed> = {}): Proposed => ({ title: 'Write hello.txt at the root', problem: 'attempt 1 wrote it elsewhere', kind: 'check', scope: 'product', proposal: 'a test that hello.txt exists', recurs: '', ...p });
 
-/** The builder misses on its first attempt of each item when `miss` is set; the retro returns what it is given. */
-function team(lessons: Proposed[] | (() => Proposed[]), miss = true): Runtime & { calls: AgentCall[] } {
+type Decisions = { id: string; decision: 'accept' | 'reject'; reason: string }[];
+
+/**
+ * The builder misses on its first attempt of each item when `miss` is set; the retro returns what it is given, and the
+ * tech lead the decisions it is given (none by default, so the lessons wait for the client).
+ */
+function team(lessons: Proposed[] | (() => Proposed[]), miss = true, decisions?: Decisions): Runtime & { calls: AgentCall[] } {
   const builds: Record<string, number> = {};
   const rt = {
     name: 'claude-code' as const,
@@ -33,6 +38,7 @@ function team(lessons: Proposed[] | (() => Proposed[]), miss = true): Runtime & 
     async call(c: AgentCall) {
       rt.calls.push(c);
       if (c.systemPrompt.includes('retrospective')) return { ok: true, text: '', structured: { lessons: typeof lessons === 'function' ? lessons() : lessons }, tokens, durationMs: 1 };
+      if (c.systemPrompt.includes('# Skill: decide-lessons')) return decisions ? { ok: true, text: '', structured: { decisions }, tokens, durationMs: 1 } : { ok: false, text: '', tokens, durationMs: 1, error: 'no answer' };
       if (c.access === 'write' && !c.writeOnly) {
         const n = (builds[c.cwd] = (builds[c.cwd] ?? 0) + 1);
         writeFileSync(join(c.cwd, miss && n === 1 ? 'other.txt' : 'hello.txt'), 'x\n');
@@ -85,7 +91,34 @@ test('a second attempt gets a retro; an accepted check becomes a ready backlog i
   const file = readFileSync(join(root, 'backlog/0002-lesson-l-1.md'), 'utf8');
   assert.match(file, /title: "Check: Write hello.txt at the root"\nstatus: ready[\s\S]*a test that hello.txt exists[\s\S]*Source: lesson L-1/);
   assert.match(git(root, ['log', '-1', '--format=%s']), /B-0002 from lesson L-1/);
-  assert.throws(() => decideLesson(p, 'L-1', 'reject'), /already accepted/);
+  assert.throws(() => decideLesson(p, 'L-1', 'accept'), /already accepted/);
+});
+
+test('the tech lead decides the lessons, and the client can reverse a decision', async () => {
+  item(1);
+  const logs: string[] = [];
+  const rt = team([lesson(), lesson({ kind: 'doc', title: 'Second' })], true, [
+    { id: 'L-1', decision: 'accept', reason: 'a check stops it for good' },
+    { id: 'L-2', decision: 'reject', reason: 'the check covers it' },
+  ]);
+  await run({ log: (m) => logs.push(m), context: { runtime: () => rt } });
+  const decider = rt.calls.find((c) => c.systemPrompt.includes('# Skill: decide-lessons'))!;
+  assert.match(decider.systemPrompt, /You are the tech lead/);
+  assert.match(decider.prompt, /### L-1: Write hello\.txt at the root[\s\S]*### L-2: Second/);
+  const p = openProduct();
+  const [l1, l2] = loadLessons(p.paths.factory);
+  assert.deepEqual([l1?.status, l1?.decided_by, l1?.applied, l2?.status], ['accepted', 'tech-lead', 'B-0002', 'rejected']);
+  assert.ok(logs.includes('L-1 accepted by the tech lead: B-0002'));
+  assert.deepEqual(board(p).decisions.map((d) => d.kind), ['review'], 'nothing about lessons waits for the client');
+
+  const back = decideLesson(p, 'L-1', 'reject');
+  assert.deepEqual([back.status, back.decided_by], ['rejected', 'owner']);
+  assert.match(readFileSync(join(root, 'backlog/0002-lesson-l-1.md'), 'utf8'), /status: draft/, 'its backlog item is parked');
+  assert.match(git(root, ['log', '-1', '--format=%s']), /park B-0002, lesson L-1 was rejected/);
+  assert.equal(decideLesson(p, 'L-2', 'accept').status, 'accepted', 'the client can take a lesson the tech lead rejected');
+  assert.match(readFileSync(join(root, '.factory/memory/context.md'), 'utf8'), /- Second\. .*\(L-2\)/);
+  decideLesson(p, 'L-2', 'reject');
+  assert.doesNotMatch(readFileSync(join(root, '.factory/memory/context.md'), 'utf8'), /\(L-2\)/, 'and take its line out again');
 });
 
 test('a doc lesson goes into the memory; when the mistake comes back, it comes back as a check', async () => {
@@ -125,7 +158,7 @@ test('a broken retro is logged and changes nothing', async () => {
   const rt = team(() => [{ title: 'x' } as Proposed]);
   const [out] = await run({ log: (m) => logs.push(m), context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
-  assert.ok(logs.some((m) => /^retro: the retro failed on B-0001/.test(m)));
+  assert.ok(logs.some((m) => /^lessons: the retro failed on B-0001/.test(m)));
   assert.deepEqual(loadLessons(openProduct().paths.factory), []);
 });
 
@@ -153,7 +186,7 @@ test('the owner decides lessons on the digest ticket', async () => {
 });
 
 test('eval ablations: a workflow without a step, and a step that does not exist', () => {
-  assert.deepEqual(loadWorkflow('feature', ['tests']).steps.map((s) => s.id), ['build', 'check', 'verify']);
+  assert.deepEqual(loadWorkflow('feature', ['tests']).steps.map((s) => s.id), ['build', 'check', 'verify', 'review', 'security', 'ux']);
   assert.throws(() => loadWorkflow('feature', ['lint']), /no step lint/);
   assert.throws(() => loadWorkflow('feature', ['build', 'tests']), /must start with an agent step with write access|first step must be/);
 });

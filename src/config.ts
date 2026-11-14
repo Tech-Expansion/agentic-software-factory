@@ -24,6 +24,14 @@ export interface ProjectConfig {
   runtimes?: { default?: RuntimeName; roles?: Record<string, RuntimeName> };
   models?: Record<string, string>;
   commands: { setup?: string[]; check: string[] };
+  /** The workflow items run unless they name another; feature when unset. */
+  workflow?: string;
+  /** Named path lists a workflow step's `when.touches` can use, for example `ui` for the UX designer's review. */
+  paths?: Record<string, string[]>;
+  /** Specialist reviewers the product turns on (security-reviewer, ux-designer); their steps are skipped otherwise. */
+  specialists?: string[];
+  /** Commands per environment for `asf deploy <env>`, run by the runner with the owner's own environment. */
+  deploy?: Record<string, string[]>;
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
   tracker?: TrackerConfig;
 }
@@ -48,6 +56,7 @@ export interface Policy {
   check_rounds_in_session: number;
   denied_commands: string[];
   approval_paths: string[];
+  client_paths: string[];
   protected_paths: string[];
   sensitive_paths: string[];
   test_paths: string[];
@@ -125,6 +134,7 @@ export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbo
     check_rounds_in_session: Math.min(base.check_rounds_in_session ?? 0, override.check_rounds_in_session ?? Infinity),
     denied_commands: union(base.denied_commands, override.denied_commands),
     approval_paths: union(base.approval_paths, override.approval_paths),
+    client_paths: union(base.client_paths ?? [], override.client_paths),
     protected_paths: union(base.protected_paths, override.protected_paths),
     sensitive_paths: union(base.sensitive_paths, override.sensitive_paths),
     test_paths: union(base.test_paths, override.test_paths),
@@ -146,6 +156,45 @@ export function loadPolicy(paths: ProductPaths): Policy {
   return mergePolicy(base, loadValidated<Partial<Policy>>(paths.policy, 'policy'));
 }
 
+/** Role names before the team was named after a product team's roles (ADR 0010); still read from settings. */
+export const ROLE_ALIASES: Record<string, string> = {
+  planner: 'product-owner',
+  analyst: 'product-owner',
+  architect: 'tech-lead',
+  tester: 'qa',
+  builder: 'developer',
+  verifier: 'qa',
+  retro: 'scrum-master',
+};
+
+export const canonicalRole = (role: string) => ROLE_ALIASES[role] ?? role;
+
+/** A setting keyed by role: the role's own name first, then a name it used to have. */
+function byRole<T>(map: Record<string, T> | undefined, role: string): T | undefined {
+  if (!map) return undefined;
+  const name = canonicalRole(role);
+  if (map[name] !== undefined) return map[name];
+  const old = Object.keys(ROLE_ALIASES).find((k) => ROLE_ALIASES[k] === name && map[k] !== undefined);
+  return old ? map[old] : undefined;
+}
+
 export function runtimeFor(project: ProjectConfig, role: string): RuntimeName {
-  return project.runtimes?.roles?.[role] ?? project.runtimes?.default ?? 'claude-code';
+  return byRole(project.runtimes?.roles, role) ?? project.runtimes?.default ?? 'claude-code';
+}
+
+export function modelFor(project: ProjectConfig, role: string): string | undefined {
+  return byRole(project.models, role);
+}
+
+/**
+ * Specialists the product's own settings call for and that are not on: the security reviewer once there are
+ * sensitive paths (keys, signing, money, auth), the UX designer once there is a `ui` path list. The team suggests;
+ * the client turns one on by adding it to `specialists:`.
+ */
+export function suggestedSpecialists(project: ProjectConfig, policy: Policy): { role: string; why: string }[] {
+  const on = new Set((project.specialists ?? []).map(canonicalRole));
+  const out: { role: string; why: string }[] = [];
+  if (policy.sensitive_paths.length && !on.has('security-reviewer')) out.push({ role: 'security-reviewer', why: `the product has sensitive paths (${policy.sensitive_paths.join(', ')})` });
+  if (project.paths?.ui?.length && !on.has('ux-designer')) out.push({ role: 'ux-designer', why: 'the product has a ui path list' });
+  return out;
 }

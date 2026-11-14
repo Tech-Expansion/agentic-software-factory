@@ -66,7 +66,7 @@ test('eval: hidden tests decide delivery, drafts are left alone, results are wri
   assert.equal(good?.delivered, true, good?.error ?? good?.hidden?.output);
   assert.equal(good?.firstAttempt, true);
   assert.deepEqual(good?.items, [{ id: 'B-0001', state: 'done', attempts: 1, reason: undefined }]);
-  assert.equal(good?.tokens, 330, 'tests, build and verify');
+  assert.equal(good?.tokens, 440, 'tests, build, verify and review');
   assert.deepEqual(good?.breaches, []);
   assert.equal(wrong?.delivered, false);
   assert.equal(wrong?.hidden?.ok, false);
@@ -125,7 +125,7 @@ test('eval: a usage limit stops the run, which is marked incomplete and never sc
   assert.deepEqual(r.cases.map((c) => `${c.id}#${c.trial}`), ['a-first#1', 'a-first#2']);
   assert.match(r.incomplete!, /^stopped at b-limited trial 1 by a usage limit: paused by a usage limit in tests: You've hit your 5-hour limit/);
   assert.match(formatEval(r), /INCOMPLETE, not a baseline/);
-  assert.equal(ran, 6 + 2, 'two full runs, then the limited case twice (run retries a paused item once), then nothing');
+  assert.equal(ran, 8 + 2, 'two full runs, then the limited case twice (run retries a paused item once), then nothing');
 });
 
 test('eval: a clarify case is scored on the gaps it covers, and nothing is built', async () => {

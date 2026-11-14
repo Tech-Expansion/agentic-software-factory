@@ -17,10 +17,8 @@ denied_commands:
   - curl
   - wget
   - npm publish
-  - dotnet nuget push
 approval_paths:
   - "**/package.json"
-  - "**/*.csproj"
   - "**/requirements*.txt"
   - "**/pyproject.toml"
   - "**/go.mod"
@@ -28,6 +26,20 @@ approval_paths:
   - "**/migrations/**"
   - "**/Dockerfile"
   - ".github/**"
+  # What runs with the owner's credentials at deploy time: changed only with the owner's approval.
+  - "**/.gitlab-ci.yml"
+  - "**/deploy*"
+  - "**/deploy/**"
+  - "**/infra/**"
+  - "**/*.tf"
+  - "**/k8s/**"
+  - "**/helm/**"
+  - "**/docker-compose*"
+  - "**/compose.y*ml"
+# A change here waits for the client however it was reviewed: it cannot be undone once it runs. Add globs to keep
+# the client's own approval on anything else (for example "**/package.json").
+client_paths:
+  - "**/migrations/**"
 # Unattended runs may not change these. Planning them is done with the user, in `asf discover`.
 protected_paths:
   - ".factory/**"
@@ -35,7 +47,7 @@ protected_paths:
   - "product/**"
   - "specs/**"
   - "backlog/**"
-# Changes here are approved by the owner one by one, plan first: keys, signing, money, auth.
+# Keys, signing, money, auth: never built without acceptance tests first; the security reviewer checks them when it is on.
 sensitive_paths: []
 # Test files. Deleting one, or adding a skip to one, sends the item back to the builder.
 test_paths:
@@ -44,8 +56,6 @@ test_paths:
   - "**/test/**"
   - "**/tests/**"
   - "**/__tests__/**"
-  - "**/*Tests.cs"
-  - "**/*Test.cs"
   - "**/test_*.py"
   - "**/*_test.py"
   - "**/*_test.go"
@@ -56,8 +66,6 @@ sandbox:
   # The only hosts sandboxed commands can reach. Registries need no credentials to read.
   network_allow:
     - registry.npmjs.org
-    - api.nuget.org
-    - "*.nuget.org"
     - pypi.org
     - files.pythonhosted.org
     - proxy.golang.org
@@ -78,9 +86,6 @@ sandbox:
   # Writable besides the worktree and the temp directory: package caches.
   write_allow:
     - "~/.npm"
-    - "~/.nuget"
-    - "~/.local/share/NuGet"
-    - "~/.dotnet"
     - "~/.cache"
   # Removed from the environment of agent commands and checks. Names that look like secrets are removed too.
   secret_env:
@@ -97,5 +102,5 @@ sandbox:
     - AWS_SECRET_ACCESS_KEY
     - AWS_SESSION_TOKEN
   # Listening and connecting on loopback. On Linux the sandbox has its own loopback; on macOS this opens every local
-  # port of the host, so a product turns it on only when its tests need it (.NET test runs do).
+  # port of the host, so a product turns it on only when its tests need it.
   local_binding: false

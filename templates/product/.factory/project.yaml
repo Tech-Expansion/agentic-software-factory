@@ -15,13 +15,29 @@ base_branch: main
 
 runtimes:
   default: claude-code
-  # A second vendor as verifier catches what the builder's model is blind to:
+  # A second vendor for QA catches what the developer's model is blind to:
   # roles:
-  #   verifier: codex
+  #   qa: codex
 
-# Model per role, passed to the CLI as is. Unset roles use the CLI's default.
+# Model per role, passed to the CLI as is. Unset roles use the CLI's default. Roles: product-owner, tech-lead,
+# developer, qa, security-reviewer, ux-designer, devops, scrum-master.
 # models:
-#   builder: sonnet
+#   developer: sonnet
+
+# The workflow items run unless they name their own (`workflow:` on the item, or the ticket label asf-<name>).
+# .factory/workflows/<name>.yaml replaces the factory's workflow of that name.
+# workflow: feature
+
+# Specialist reviewers, off until you turn them on. The tech lead reviews every change either way. The security
+# reviewer then checks changes to sensitive and approval paths and high-risk items; the UX designer checks changes
+# under paths.ui. The product owner suggests them in `asf discover`, and `asf validate` when the settings call for one.
+# specialists: [security-reviewer, ux-designer]
+# paths:
+#   ui: ["src/ui/**"]
+
+# Commands per environment for `asf deploy <env>`. Only you run them, with your own credentials; agents never do.
+# deploy:
+#   staging: ["./deploy.sh staging"]
 
 commands:
   # Run once in each new worktree, for example: npm ci

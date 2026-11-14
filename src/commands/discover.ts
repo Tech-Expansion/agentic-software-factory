@@ -1,8 +1,8 @@
-import { runtimeFor } from '../config.js';
+import { modelFor, runtimeFor } from '../config.js';
 import { systemPrompt } from '../prompt.js';
 import { openProduct, runtimes } from './context.js';
 
-const SKILLS = ['discovery-interview', 'write-feature-spec', 'plan-backlog'];
+const SKILLS = ['discovery-interview', 'market-scan', 'write-feature-spec', 'plan-backlog'];
 
 const OPENING =
   'Start or continue discovery for this product. Read .factory/project.yaml, product/, specs/ and backlog/ first, ' +
@@ -11,11 +11,11 @@ const OPENING =
 /** An interactive session with the planner, in the user's own CLI. Planning is done with the user, never unattended. */
 export function discover(): Promise<number> {
   const { paths, project } = openProduct();
-  const runtime = runtimes[runtimeFor(project, 'planner')];
+  const runtime = runtimes[runtimeFor(project, 'product-owner')];
   return runtime.interactive({
     cwd: paths.root,
-    systemPrompt: systemPrompt('planner', SKILLS),
+    systemPrompt: systemPrompt('product-owner', SKILLS, paths.factory),
     prompt: OPENING,
-    model: project.models?.planner,
+    model: modelFor(project, 'product-owner'),
   });
 }

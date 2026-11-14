@@ -79,8 +79,13 @@ engineering, Kent Beck on agents and tests, Simon Willison's lethal trifecta, De
 
 ## Milestones
 
-Where we are (2026-11-07): M0 to M6 are built and covered by tests with a fake runtime; the Jira adapter is not yet
-checked against the real `acli`. M7 has not started.
+Where we are (2026-11-14): M0 to M6 are built and covered by tests with a fake runtime; the Jira adapter is not yet
+checked against the real `acli`. M7 has not started. Products can add to roles and skills and bring their own
+workflows, and a quick workflow skips the tests written first for small changes (ADR 0009). The team is named after a product team's roles,
+with a DevOps engineer whose pipeline the owner deploys with `asf deploy` (ADR 0010, ADR 0011); SRE is designed, not
+built. The owner is the client: the tech lead reviews every change and decides plans and lessons, the security
+reviewer and the UX designer are specialists a product turns on, and only decisions with business consequences wait
+for the owner (ADR 0012).
 
 ### M0. Measure first
 

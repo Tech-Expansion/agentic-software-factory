@@ -1,6 +1,6 @@
 # 0007. Lessons proposed by retros, decided by the owner, never loosening the policy
 
-Status: accepted
+Status: accepted; amended by ADR 0012 (the tech lead decides lessons, the owner can reverse them)
 Date: 2026-11-07
 Deciders: project owner
 

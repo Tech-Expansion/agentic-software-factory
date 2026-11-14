@@ -19,6 +19,11 @@
       "items": { "type": "string" },
       "description": "Glob patterns. An item whose diff touches one is flagged for the user's attention before approval."
     },
+    "client_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns. A change that touches one waits for the client's approval, even after the tech lead's review."
+    },
     "protected_paths": {
       "type": "array",
       "items": { "type": "string" },
@@ -49,7 +54,7 @@
         "secret_env": { "type": "array", "items": { "type": "string" } },
         "local_binding": {
           "type": "boolean",
-          "description": "Let sandboxed processes listen and connect on loopback. On macOS this reaches every local port of the host, so it is off unless a product needs it (.NET test runs do)."
+          "description": "Let sandboxed processes listen and connect on loopback. On macOS this reaches every local port of the host, so it is off unless a product's tests need it."
         }
       }
     }

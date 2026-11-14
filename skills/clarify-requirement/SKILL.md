@@ -12,3 +12,5 @@ description: Read a requirement, find what is open or contradictory, and ask the
 4. Merge questions that one answer settles together. Prefer few, sharp questions with concrete options over many
    open ones.
 5. Check each question against the text once more: if the answer is already there, drop it.
+6. Size the item. `small` only when it is one clear change to a few files and nothing above was left to decide;
+   it is then built without acceptance tests written first. Anything touching money, keys, auth or data is `normal`.

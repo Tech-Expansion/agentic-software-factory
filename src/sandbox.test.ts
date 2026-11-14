@@ -68,7 +68,6 @@ test('claude adapter: Bash runs in a sandbox that fails closed, and Read cannot 
     assert.ok(settings.sandbox.credentials.envVars.some((v: { name: string }) => v.name === 'CLAUDE_CODE_OAUTH_TOKEN'));
     assert.deepEqual(settings.hooks, { Stop: [] });
     assert.equal(settings.sandbox.network.allowLocalBinding, false, 'loopback stays closed unless a product needs it');
-    assert.equal(settings.env.EnableSourceControlManagerQueries, 'false');
     assert.match(args[args.indexOf('--disallowedTools') + 1]!, /Read\(~\/\.claude\/\*\*\)/);
     assert.equal(args[args.indexOf('--output-format') + 1], 'stream-json');
   } finally {

@@ -83,6 +83,40 @@
         }
       }
     },
+    "workflow": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The workflow items run unless they name their own; feature when unset. The product's .factory/workflows/<name>.yaml replaces the factory's."
+    },
+    "paths": {
+      "type": "object",
+      "description": "Named path lists that a workflow step's `when.touches` can use, for example ui: [\"src/ui/**\"] to bring in the UX designer's review.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "specialists": {
+      "type": "array",
+      "description": "Specialist reviewers this product turns on, for example [security-reviewer] for a product that holds keys or money, or [ux-designer] with paths.ui set. The team proposes them; the owner decides.",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "deploy": {
+      "type": "object",
+      "description": "Commands per environment for `asf deploy <env>`, for example production: [\"./deploy.sh production\"]. The runner runs them, outside the sandbox and with your own environment and credentials, only when you run asf deploy; agents never do.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1
+      }
+    },
     "opt_ins": {
       "type": "object",
       "additionalProperties": false,
@@ -175,7 +209,7 @@
     "integration_branch": {
       "type": "string",
       "minLength": 1,
-      "description": "When set, items branch from it and those that pass checks and review merge into it on their own; the owner releases it into base_branch in batches with `asf release`. Items that touch approval or sensitive paths, or are high risk, still wait for the owner one by one."
+      "description": "When set, items branch from it and those that pass checks and review merge into it on their own; the owner releases it into base_branch in batches with `asf release`. Items that touch client_paths, or that the tech lead escalates, still wait for the owner one by one."
     }
   },
   "definitions": {

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
+import { canonicalRole, modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
@@ -12,7 +12,7 @@ import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
 import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
 import type { AgentResult, Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
-import { loadWorkflow, type AgentStep, type Workflow } from './workflow.js';
+import { loadWorkflow, writesTests, type AgentStep, type Workflow } from './workflow.js';
 
 export interface EngineContext {
   paths: ProductPaths;
@@ -20,7 +20,7 @@ export interface EngineContext {
   policy: Policy;
   runtime: (name: RuntimeName) => Runtime;
   log?: (msg: string) => void;
-  /** The workflow items run through; the feature workflow when unset. */
+  /** The workflow every item runs through, whatever it asks for: an ablation in `asf eval`. */
   workflow?: Workflow;
 }
 
@@ -43,6 +43,8 @@ interface Verdict {
   criteria: { id: string; status: 'met' | 'not_met' | 'unverified'; evidence: string }[];
   findings: { severity: 'blocker' | 'major' | 'minor'; message: string }[];
   summary: string;
+  /** Decisions for the client, which hold the change for them without failing it. */
+  escalate?: string[];
 }
 
 /** True when a failed call hit the subscription's usage limit rather than something a person must fix. */
@@ -62,11 +64,43 @@ interface Plan {
   files: string[];
   tests: string[];
   risks: string[];
+  client_decisions?: string[];
 }
 
 export function formatPlan(p: Plan): string {
   const list = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n') || '- (none)';
-  return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}`;
+  const asks = p.client_decisions?.length ? `\n\nFor the client to decide:\n${list(p.client_decisions)}` : '';
+  return `${p.approach}\n\nFiles:\n${list(p.files)}\n\nTests:\n${list(p.tests)}\n\nRisks:\n${list(p.risks)}${asks}`;
+}
+
+/**
+ * The workflow an item runs: its own `workflow:`, else the product's, else feature. A high-risk item always runs
+ * feature, which must write acceptance tests first; a product that replaced feature with one that does not gets the
+ * item blocked instead of built untested.
+ */
+export function selectWorkflow(paths: ProductPaths, project: ProjectConfig, item: BacklogItem): Workflow {
+  if (item.risk === 'high') return testedFeature(paths, 'a high-risk item');
+  return loadWorkflow(item.workflow ?? project.workflow ?? 'feature', [], paths.factory);
+}
+
+function testedFeature(paths: ProductPaths, who: string): Workflow {
+  const wf = loadWorkflow('feature', [], paths.factory);
+  if (!writesTests(wf)) throw new Error(`the product's feature workflow has no tests step, and ${who} gets acceptance tests first`);
+  return wf;
+}
+
+/** A specialist's step runs only for a product that turned the specialist on. */
+export const specialistOn = (step: AgentStep, project: ProjectConfig) =>
+  !step.specialist || (project.specialists ?? []).some((r) => canonicalRole(r) === canonicalRole(step.role));
+
+/** Whether a step with `when` applies to this change: a changed file in one of its paths, or the item's risk. */
+export function stepApplies(step: AgentStep, item: BacklogItem, changed: string[], policy: Policy, project: ProjectConfig): boolean {
+  const w = step.when;
+  if (!w) return true;
+  if (w.risk && item.risk === w.risk) return true;
+  const named: Record<string, string[]> = { ...project.paths, sensitive: policy.sensitive_paths, approval: policy.approval_paths };
+  const globs = (w.touches ?? []).flatMap((t) => (/[/*.]/.test(t) ? [t] : (named[t] ?? [])));
+  return globs.length > 0 && changed.some((f) => matchesAny(f, globs));
 }
 
 /** The branch items start from: the integration branch, created from the base branch the first time. */
@@ -79,11 +113,11 @@ export function integrationBase(root: string, project: ProjectConfig): string {
 }
 
 /** The runner does not take "pass" on trust: an unmet criterion or a blocker finding fails the item. */
-export function verdictFails(v: Verdict): string | undefined {
+export function verdictFails(v: Verdict, who = 'Verifier'): string | undefined {
   const unmet = v.criteria.filter((c) => c.status === 'not_met');
   const blockers = v.findings.filter((f) => f.severity === 'blocker');
   if (v.verdict === 'pass' && !unmet.length && !blockers.length) return undefined;
-  const lines = [`Verifier: ${v.summary}`];
+  const lines = [`${who}: ${v.summary}`];
   for (const c of v.criteria.filter((c) => c.status !== 'met')) lines.push(`- ${c.id} ${c.status}: ${c.evidence}`);
   for (const f of v.findings) lines.push(`- [${f.severity}] ${f.message}`);
   return lines.join('\n');
@@ -105,7 +139,8 @@ function stopHook(paths: ProductPaths, item: string, name: string, cfg: Omit<Sto
   };
 }
 
-export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: Workflow = ctx.workflow ?? loadWorkflow('feature')): Promise<ItemOutcome> {
+/** Runs one item. `given` is the workflow to use instead of the item's own: feature, when a quick change escalates. */
+export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Workflow): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
   // Items branch from the integration branch when there is one, so each builds on what is already merged.
   const base = integrationBase(paths.root, project);
@@ -152,6 +187,13 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     return { id: item.id, state: 'paused', reason: st.reason, tokens: st.tokens, flags: [], resumeAt: r.rateLimit?.resetsAt ? r.rateLimit.resetsAt * 1000 : undefined };
   };
 
+  let workflow: Workflow;
+  try {
+    workflow = given ?? ctx.workflow ?? selectWorkflow(paths, project, item);
+  } catch (err) {
+    return finish('blocked', (err as Error).message);
+  }
+
   const fresh = !existsSync(worktree);
   ensureWorktree(paths.root, worktree, branch, base);
   // Tests written for an earlier run stay locked, as long as the branch still has them.
@@ -181,7 +223,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         : undefined;
     const result = await ctx.runtime(runtimeName).call({
       cwd: worktree,
-      systemPrompt: systemPrompt(step.role, step.skills),
+      systemPrompt: systemPrompt(step.role, step.skills, paths.factory),
       prompt: itemPrompt({
         root: worktree,
         project,
@@ -193,7 +235,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         plan: st.plan?.approved ? st.plan.text : undefined,
       }),
       access: step.access,
-      model: project.models?.[step.role],
+      model: modelFor(project, step.role),
       schema: schema ? vendorSchema(schema) : step.output === 'verdict' ? vendorSchema('verdict') : undefined,
       allowedCommands: commands,
       deniedCommands: policy.denied_commands,
@@ -210,7 +252,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
       kind: 'agent',
       role: step.role,
       runtime: runtimeName,
-      model: project.models?.[step.role],
+      model: modelFor(project, step.role),
       tokens: result.tokens,
       cost_usd: result.costUsd,
       duration_ms: result.durationMs,
@@ -230,16 +272,22 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
   const lockedChanges = () =>
     st.tests ? git(worktree, ['diff', '--cached', '--name-only', st.tests.commit, '--', ...st.tests.files]).split('\n').filter(Boolean) : [];
 
-  // A high-risk item gets a plan the owner approves before anything is written.
+  // A high-risk item gets the tech lead's plan before anything is written. The build follows it at once, unless the
+  // plan needs a decision that is the client's: then it waits for them.
   if (item.risk === 'high' && !st.plan?.approved) {
     if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
     const { result, runtimeName } = await callAgent(PLAN_STEP, 1, { feedback: st.feedback }, 'plan');
     if (!result.ok) return stopped(result, runtimeName, 'plan');
     const errors = validate('plan', result.structured);
     if (errors.length) return finish('blocked', `plan returned an invalid plan: ${errors.join('; ')}`);
-    st.plan = { text: formatPlan(result.structured as Plan) };
+    const plan = result.structured as Plan;
+    st.plan = { text: formatPlan(plan) };
     st.feedback = undefined;
-    return finish('plan-review', 'the plan waits for your approval');
+    if (plan.client_decisions?.length) return finish('plan-review', `the plan needs your decision: ${plan.client_decisions.join('; ')}`);
+    st.plan.approved = new Date().toISOString();
+    st.plan.by = 'tech-lead';
+    save();
+    event({ step: 'plan', kind: 'item', outcome: 'plan approved', detail: 'by the tech lead; nothing in it is the client\'s to decide' });
   }
 
   if (testsStep && !st.tests) {
@@ -274,6 +322,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
     st.attempts = attempt;
     let checksText: string | undefined;
     let failed: string | undefined;
+    // Whether the tech lead passed this attempt, and what a reviewer left for the client to decide.
+    let reviewed = false;
+    const escalated: string[] = [];
 
     for (const step of steps) {
       if (step.kind === 'checks') {
@@ -289,6 +340,11 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
         continue;
       }
 
+      if (!specialistOn(step, project)) continue;
+      if (step.when && !stepApplies(step, item, stageAndList(worktree, base), policy, project)) {
+        log(`${item.id} attempt ${attempt} ${step.id}: not needed for this change`);
+        continue;
+      }
       if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
       const diff = step.access === 'read' ? (stageAndList(worktree, base), stagedDiff(worktree, base, 60_000)) : undefined;
       const { result, runtimeName } = await callAgent(step, attempt, {
@@ -322,14 +378,34 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
           failed = `Tests may not be deleted, skipped or focused to get an item through. Undo this, and fix the code instead (if a test is wrong, say so in your summary):\n${tampered.map((t) => `- ${t}`).join('\n')}`;
           break;
         }
+        // A change without tests written first must not reach a sensitive path: built again, tests first.
+        const sensitive = !testsStep && !ctx.workflow ? changed.filter((f) => matchesAny(f, policy.sensitive_paths)) : [];
+        if (sensitive.length) {
+          let feature: Workflow;
+          try {
+            feature = testedFeature(paths, `a change to ${sensitive.join(', ')}`);
+          } catch (err) {
+            return finish('blocked', (err as Error).message);
+          }
+          git(worktree, ['reset', '-q', '--hard', base]);
+          git(worktree, ['clean', '-q', '-fd']);
+          st.feedback = undefined;
+          save();
+          event({ attempt, step: step.id, kind: 'item', outcome: 'escalated', detail: `${workflow.name} touched ${sensitive.join(', ')}; built again through ${feature.name}` });
+          log(`${item.id} touched sensitive paths in ${workflow.name}; building it again through ${feature.name}, tests first`);
+          return runItem(ctx, item, feature);
+        }
         st.summary = result.text.slice(0, 4000);
       }
 
       if (step.output === 'verdict') {
         const errors = validate('verdict', result.structured);
         if (errors.length) return finish('blocked', `${step.id} returned an invalid verdict: ${errors.join('; ')}`);
-        failed = verdictFails(result.structured as Verdict);
+        const v = result.structured as Verdict;
+        failed = verdictFails(v, step.id === 'verify' ? 'Verifier' : `Review by the ${step.role}`);
         if (failed) break;
+        if (canonicalRole(step.role) === 'tech-lead') reviewed = true;
+        escalated.push(...(v.escalate ?? []).map((e) => `${step.role}: ${e}`));
       }
     }
 
@@ -350,9 +426,14 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, workflow: W
 
     if (!failed) {
       const changed = stageAndList(worktree, base);
-      // Anything flagged waits for the owner on its own, even with an integration branch.
-      const flags = changed.filter((f) => matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths));
-      if (item.risk === 'high') flags.push('risk: high');
+      // Anything flagged waits for the client on its own, even with an integration branch: what cannot be undone,
+      // and what a reviewer left for them. A workflow without the tech lead's review leaves the client the review of
+      // approval and sensitive paths, and of high-risk items.
+      const flags = [...changed.filter((f) => matchesAny(f, policy.client_paths)), ...escalated];
+      if (!reviewed) {
+        flags.push(...changed.filter((f) => !flags.includes(f) && (matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths))));
+        if (item.risk === 'high') flags.push('risk: high');
+      }
       commitAll(worktree, `${subject(item, `feat: ${item.title}`)}\n\nBacklog: ${item.id}\n\n${st.summary ?? ''}`.trim() + '\n');
       st.feedback = undefined;
       return finish('review', undefined, flags);

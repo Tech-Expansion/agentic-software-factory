@@ -2,26 +2,46 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { factoryRoot } from './paths.js';
 import type { BacklogItem } from './backlog.js';
-import type { ProjectConfig } from './config.js';
+import { canonicalRole, ROLE_ALIASES, type ProjectConfig } from './config.js';
 
 const stripFront = (text: string) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
 
-export function loadRole(name: string): string {
-  const file = join(factoryRoot, 'agents', `${name}.md`);
-  if (!existsSync(file)) throw new Error(`unknown role: ${name}`);
-  return stripFront(readFileSync(file, 'utf8'));
+function readPrompt(file: string): string | undefined {
+  return existsSync(file) ? stripFront(readFileSync(file, 'utf8')) : undefined;
 }
 
-export function loadSkill(name: string): string {
-  const file = join(factoryRoot, 'skills', name, 'SKILL.md');
-  if (!existsSync(file)) throw new Error(`unknown skill: ${name}`);
-  return stripFront(readFileSync(file, 'utf8'));
+/**
+ * The factory's text with the product's own added under "Product rules". A product adds to a role or skill and
+ * never replaces it, so it cannot drop the factory's rules; it may also bring a role or skill of its own.
+ */
+function layered(kind: string, name: string, own: string, product: string[] = []): string {
+  const base = readPrompt(own);
+  const extra = product.map(readPrompt).filter((t): t is string => !!t).join('\n\n') || undefined;
+  if (base === undefined && extra === undefined) throw new Error(`unknown ${kind}: ${name}`);
+  if (!base) return extra!;
+  return extra ? `${base}\n\n## Product rules\n\n${extra}` : base;
 }
 
-/** Role first, then only the skills the step names. Nothing item-specific, so it stays cacheable across items. */
-export function systemPrompt(role: string, skills: string[]): string {
-  const parts = [`# Your role\n\n${loadRole(role)}`];
-  for (const s of skills) parts.push(`# Skill: ${s}\n\n${loadSkill(s)}`);
+/** `local` is the product's .factory directory, where `agents/<name>.md` adds to the role. */
+export function loadRole(role: string, local?: string): string {
+  const name = canonicalRole(role);
+  // A product's file under a role's old name still adds to it.
+  const names = [name, ...Object.keys(ROLE_ALIASES).filter((k) => ROLE_ALIASES[k] === name)];
+  return layered('role', name, join(factoryRoot, 'agents', `${name}.md`), local ? names.map((n) => join(local, 'agents', `${n}.md`)) : []);
+}
+
+/** `local` is the product's .factory directory, where `skills/<name>/SKILL.md` adds to the skill. */
+export function loadSkill(name: string, local?: string): string {
+  return layered('skill', name, join(factoryRoot, 'skills', name, 'SKILL.md'), local ? [join(local, 'skills', name, 'SKILL.md')] : []);
+}
+
+/**
+ * Role first, then only the skills the step names. Nothing item-specific, so it stays cacheable across items.
+ * `local` is the product's .factory directory, for the product's additions.
+ */
+export function systemPrompt(role: string, skills: string[], local?: string): string {
+  const parts = [`# Your role\n\n${loadRole(role, local)}`];
+  for (const s of skills) parts.push(`# Skill: ${s}\n\n${loadSkill(s, local)}`);
   return parts.join('\n\n');
 }
 
@@ -36,7 +56,7 @@ export interface ItemContext {
   diff?: string;
   /** Acceptance tests written before the build, which the builder cannot change. */
   lockedTests?: string[];
-  /** The plan the owner approved, for a high-risk item. */
+  /** The approved plan, for a high-risk item. */
   plan?: string;
 }
 
@@ -63,7 +83,7 @@ export function itemPrompt(c: ItemContext): string {
   }
   const checks = project.commands.check.map((cmd) => `- \`${cmd}\``).join('\n');
   out.push(`## Checks the runner will run after you\n\n${checks}`);
-  if (c.plan) out.push(`## Plan approved by the owner\n\nFollow it. A change outside it needs a new plan: stop, and say so in your final message.\n\n${c.plan}`);
+  if (c.plan) out.push(`## The approved plan\n\nFollow it. A change outside it needs a new plan: stop, and say so in your final message.\n\n${c.plan}`);
   if (c.lockedTests?.length) {
     out.push(
       `## Acceptance tests (locked)\n\nWritten from the criteria before the build. You cannot change them: make them pass. If one is wrong, say so under "Assumptions" in your final message.\n\n${c.lockedTests.map((f) => `- ${f}`).join('\n')}`,

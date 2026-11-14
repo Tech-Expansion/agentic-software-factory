@@ -15,6 +15,8 @@ export interface BacklogItem {
   depends_on?: string[];
   /** high: plan approved before the build, change approved on its own. */
   risk?: 'high';
+  /** The workflow to build it with, instead of the product's: `quick` for a small, clear change. */
+  workflow?: string;
   /** The ticket this item comes from. */
   tracker?: string;
   file: string;
@@ -74,6 +76,15 @@ export function setStatus(file: string, status: BacklogItem['status']): void {
   if (!m) throw new Error(`${file}: no front matter`);
   const front = m[0].replace(/^status:.*$/m, `status: ${status}`);
   writeFileSync(file, front + text.slice(m[0].length));
+}
+
+/** Sets a front matter field that is not there yet, before the closing `---`. */
+export function addField(file: string, key: string, value: string): void {
+  const text = readFileSync(file, 'utf8');
+  const m = FRONT.exec(text);
+  if (!m) throw new Error(`${file}: no front matter`);
+  if (new RegExp(`^${key}:`, 'm').test(m[1]!)) return;
+  writeFileSync(file, m[0].replace(/\r?\n---\r?\n?$/, `\n${key}: ${value}\n---\n`) + text.slice(m[0].length));
 }
 
 /** A commit subject for an item's work: led by its ticket when it has one, as "[AI-7] feat: ...". */
