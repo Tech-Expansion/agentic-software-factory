@@ -1,6 +1,6 @@
 # 0010. A product team: a core that builds every item, specialists brought in when needed
 
-Status: accepted
+Status: accepted; amended by ADR 0012 (the architect became the tech lead, who reviews every change; specialists are opt-in)
 Date: 2026-11-14
 Deciders: project owner
 

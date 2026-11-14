@@ -3,20 +3,24 @@
 A local-first agentic software factory: a small team of AI agents that turns a rough idea into tested, documented
 software, using your own Claude Code or Codex subscription.
 
-The team is named after a product team's roles ([ADR 0010](docs/adr/0010-a-product-team-core-and-specialists.md)).
+You work with it the way a client works with a dev team they hired: you decide what the product does, what it costs
+and when it ships; the team makes the technical calls
+([ADR 0010](docs/adr/0010-a-product-team-core-and-specialists.md), [ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md)).
 You plan with the **product owner** in an interactive session, or write a rough requirement as a `new` item: the
 product owner reads it, asks you only what it cannot settle itself, with options and a recommendation, and sizes it;
 the item is built only once you have answered. After that, `asf run` builds the backlog unattended: **QA** turns an
 item's acceptance criteria into tests, which are then locked; the **developer** implements the item in its own git
-worktree until they pass; your product's own checks run; and QA, read-only, judges the result against the criteria.
-Specialists join when the change calls for them: the **security reviewer** when it touches keys, auth, money or
-dependencies, the **UX designer** when it touches the UI, the **architect** to plan a high-risk item first. The
-**DevOps engineer** builds CI, images and deploy scripts; you run the deploy, with your own credentials. Nothing
-reaches your main branch until you approve it: item by item, or, with an integration branch, in batches with
-`asf release`, while changes to sensitive paths and high-risk items still wait for you one by one. A small item skips
-the tests written first; a quick change that touches a sensitive path is built again with its tests first. When an
-item needed a second attempt or you rejected it, the **scrum master** proposes what would stop the mistake next time,
-as a check rather than a longer prompt; you decide each lesson.
+worktree until they pass; your product's own checks run; QA, read-only, judges the result against the criteria; and
+the **tech lead** reviews the code as the senior developer who did not write it. The tech lead also plans a
+high-risk item before it is built. Specialists are yours to turn on, and the product owner suggests them: the
+**security reviewer** for a product with keys, auth or money, the **UX designer** for one with a UI. The **DevOps
+engineer** builds CI, images and deploy scripts; you run the deploy, with your own credentials. Nothing reaches your
+main branch until you approve it: item by item, or, with an integration branch, in batches with `asf release`. A
+change waits for you on its own only when it is yours to decide: a migration, a cost, something that cannot be
+undone, a change to the architecture you agreed to. A small item skips the tests written first; a quick change that
+touches a sensitive path is built again with its tests first. When an item needed a second attempt or you rejected
+it, the **scrum master** proposes what would stop the mistake next time, as a check rather than a longer prompt; the
+tech lead decides each lesson, and you can reverse it.
 
 > Status: 0.1, experimental. The first vertical slice works end to end with Claude Code 2.1 and codex-cli 0.147.
 > Not yet published to npm.
@@ -43,9 +47,11 @@ flowchart LR
   C -->|fail| B
   C -->|pass| V[QA<br/>read-only, verdict JSON]
   V -->|fail| B
-  V -->|pass| S[security reviewer, UX designer<br/>only when the change calls for them]
+  V -->|pass| L[tech lead<br/>read-only, code review]
+  L -->|blocker| B
+  L -->|pass| S[security reviewer, UX designer<br/>if turned on, when the change calls for them]
   S -->|blocker| B
-  S -->|pass| W[review]
+  S -->|pass| W[waits for you<br/>or merges into the integration branch]
   W -->|asf decide id approve| M[merged into main]
   W -->|asf decide id reject reason| B
   B -.->|attempt or token limit, CLI error| X[blocked]
@@ -88,7 +94,7 @@ asf init my-idea && cd my-idea
 | Command | What it does |
 | --- | --- |
 | `asf` | The board: each item's column, what the team is doing (from its heartbeat, `.factory/serve.json`), every decision waiting for you oldest first with how to give it, tokens today and this week. `--json` for scripts |
-| `asf decide <id> <decision>` | Every decision you make: `approve` (a plan, or a change in review: merged into the integration branch when there is one, otherwise the base branch), `reject <reason>` (the reason becomes the developer's feedback), `retry` (a blocked item), `Q1 <answer>` or `accept` (the product owner's questions; the decisions go into the item, which becomes ready), and `accept` or `reject` for a lesson `L-1` (a check becomes a ready backlog item, a doc goes into the project memory, a factory lesson becomes a proposal, [ADR 0007](docs/adr/0007-lessons-proposed-by-retros-decided-by-the-owner.md)) |
+| `asf decide <id> <decision>` | Every decision you make: `approve` (a plan, or a change in review: merged into the integration branch when there is one, otherwise the base branch), `reject <reason>` (the reason becomes the developer's feedback), `retry` (a blocked item), `Q1 <answer>` or `accept` (the product owner's questions; the decisions go into the item, which becomes ready), and `accept` or `reject` for a lesson `L-1`, which reverses the tech lead's decision (a check becomes a ready backlog item, a doc goes into the project memory, a factory lesson becomes a proposal, [ADR 0007](docs/adr/0007-lessons-proposed-by-retros-decided-by-the-owner.md)) |
 | `asf run [--item id] [--all]` | Build ready items now |
 | `asf run --watch [--workers n] [--interval s] [--once]` | Work unattended on an always-on host: sync, clarify, build up to n independent items at a time, report back. Idle rounds call no model; a usage limit pauses until the quota resets; a stop or crash resumes where it was. One process per product (`.factory/lock`) |
 | `asf init [dir] [--name n]` | Create a product skeleton, `git init` it and register it in `~/.agentic-software-factory` |
@@ -109,10 +115,10 @@ Older names still work: `asf status`, `serve`, `approve`, `reject`, `retry`, `an
 
 | Path | What it is |
 | --- | --- |
-| `agents/` | Role briefs: product owner, developer, QA, architect, security reviewer, UX designer, DevOps engineer, scrum master |
+| `agents/` | Role briefs: product owner, developer, QA, tech lead, security reviewer, UX designer, DevOps engineer, scrum master |
 | `skills/` | Skills the steps load, one folder each |
 | `workflows/` | Steps per kind of work: `feature.yaml`, `quick.yaml` for small changes without tests written first, `infra.yaml` for CI, images and deploy scripts |
-| `policies/default.yaml` | What agents may not do, limits, paths that need your attention |
+| `policies/default.yaml` | What agents may not do, limits, paths that need a closer look, and `client_paths` that always wait for you |
 | `templates/product/` | What `asf init` creates |
 | `schemas/` | JSON Schema for `project.yaml`, `policy.yaml`, backlog items, verdicts and run events |
 | `src/` | The runner (`asf`) and the runtime adapters |
@@ -128,7 +134,8 @@ A product shapes its team without changing the factory ([ADR 0009](docs/adr/0009
 - `.factory/workflows/<name>.yaml` replaces the factory's workflow of that name, or adds one.
 - `workflow:` in `project.yaml` sets the product's default; `workflow:` on an item, or a ticket label `asf-<name>`,
   picks one for that item.
-- `paths:` in `project.yaml` names path lists that bring in a specialist: `ui` turns on the UX designer's review.
+- `specialists:` in `project.yaml` turns on the security reviewer or the UX designer; `paths:` names path lists a
+  specialist's `when` uses, such as `ui` for the UX designer.
 - `deploy:` in `project.yaml` lists the commands per environment for `asf deploy` ([ADR 0011](docs/adr/0011-devops-builds-the-pipeline-the-owner-deploys.md)).
 
 ## Known limits
@@ -137,7 +144,8 @@ A product shapes its team without changing the factory ([ADR 0009](docs/adr/0009
   container. Codex has no network but can read what its user can; the secret scan before each commit is the
   backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
-- The product owner's size call (small or normal) is a model's judgement and not yet measured. SRE (checks after a
+- The product owner's size call (small or normal), and what the tech lead escalates to you, are a model's judgement
+  and not yet measured. SRE (checks after a
   deploy, alerts turned into bugs) is designed, not built. Jira is the only external tracker.
 - On Claude Code the developer runs the checks itself before it may finish (a Stop hook, [ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)); Codex has no such hook and relies on the runner's attempts.
 - A developer call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),
