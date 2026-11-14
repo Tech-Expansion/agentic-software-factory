@@ -156,34 +156,12 @@ export function loadPolicy(paths: ProductPaths): Policy {
   return mergePolicy(base, loadValidated<Partial<Policy>>(paths.policy, 'policy'));
 }
 
-/** Role names before the team was named after a product team's roles (ADR 0010); still read from settings. */
-export const ROLE_ALIASES: Record<string, string> = {
-  planner: 'product-owner',
-  analyst: 'product-owner',
-  architect: 'tech-lead',
-  tester: 'qa',
-  builder: 'developer',
-  verifier: 'qa',
-  retro: 'scrum-master',
-};
-
-export const canonicalRole = (role: string) => ROLE_ALIASES[role] ?? role;
-
-/** A setting keyed by role: the role's own name first, then a name it used to have. */
-function byRole<T>(map: Record<string, T> | undefined, role: string): T | undefined {
-  if (!map) return undefined;
-  const name = canonicalRole(role);
-  if (map[name] !== undefined) return map[name];
-  const old = Object.keys(ROLE_ALIASES).find((k) => ROLE_ALIASES[k] === name && map[k] !== undefined);
-  return old ? map[old] : undefined;
-}
-
 export function runtimeFor(project: ProjectConfig, role: string): RuntimeName {
-  return byRole(project.runtimes?.roles, role) ?? project.runtimes?.default ?? 'claude-code';
+  return project.runtimes?.roles?.[role] ?? project.runtimes?.default ?? 'claude-code';
 }
 
 export function modelFor(project: ProjectConfig, role: string): string | undefined {
-  return byRole(project.models, role);
+  return project.models?.[role];
 }
 
 /**
@@ -192,7 +170,7 @@ export function modelFor(project: ProjectConfig, role: string): string | undefin
  * the client turns one on by adding it to `specialists:`.
  */
 export function suggestedSpecialists(project: ProjectConfig, policy: Policy): { role: string; why: string }[] {
-  const on = new Set((project.specialists ?? []).map(canonicalRole));
+  const on = new Set(project.specialists ?? []);
   const out: { role: string; why: string }[] = [];
   if (policy.sensitive_paths.length && !on.has('security-reviewer')) out.push({ role: 'security-reviewer', why: `the product has sensitive paths (${policy.sensitive_paths.join(', ')})` });
   if (project.paths?.ui?.length && !on.has('ux-designer')) out.push({ role: 'ux-designer', why: 'the product has a ui path list' });

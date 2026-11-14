@@ -6,7 +6,7 @@ import { beforeEach, test } from 'node:test';
 import { saveClarification } from './clarify.js';
 import { openProduct } from './commands/context.js';
 import { init } from './commands/init.js';
-import { serve } from './commands/serve.js';
+import { watch } from './commands/watch.js';
 import { git } from './git.js';
 import { appendEvent } from './runlog.js';
 import { saveState, type ItemState } from './state.js';
@@ -98,7 +98,7 @@ test('a running team shows what it is doing, and its heartbeat goes when it stop
     },
     interactive: async () => 0,
   };
-  await serve({ rounds: 3, sleep: () => new Promise((r) => setTimeout(r, 5)), context: { runtime: () => rt } });
+  await watch({ rounds: 3, sleep: () => new Promise((r) => setTimeout(r, 5)), context: { runtime: () => rt } });
   assert.deepEqual(seen, ['B-0001']);
   assert.equal(readHeartbeat(p.paths.factory), undefined);
 });

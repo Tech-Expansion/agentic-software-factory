@@ -186,8 +186,8 @@ test('a high-risk item runs feature whatever workflow it names', async () => {
 test('a product adds rules to a role and brings its own workflow', async () => {
   mkdirSync(join(root, '.factory/agents'), { recursive: true });
   mkdirSync(join(root, '.factory/workflows'), { recursive: true });
-  writeFileSync(join(root, '.factory/agents/builder.md'), '---\nname: builder\n---\nNever log a mnemonic.\n');
-  writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: builder, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
+  writeFileSync(join(root, '.factory/agents/developer.md'), '---\nname: developer\n---\nNever log a mnemonic.\n');
+  writeFileSync(join(root, '.factory/workflows/lean.yaml'), 'name: lean\nsteps:\n  - { id: build, kind: agent, role: developer, skills: [implement-backlog-item], access: write }\n  - { id: check, kind: checks }\n');
   const project = join(root, '.factory/project.yaml');
   writeFileSync(project, readFileSync(project, 'utf8') + 'workflow: lean\n');
   item(1);
@@ -202,7 +202,7 @@ test('a product adds rules to a role and brings its own workflow', async () => {
 
 test('a product feature workflow without tests blocks a high-risk item instead of building it untested', async () => {
   mkdirSync(join(root, '.factory/workflows'), { recursive: true });
-  writeFileSync(join(root, '.factory/workflows/feature.yaml'), 'name: feature\nsteps:\n  - { id: build, kind: agent, role: builder, skills: [implement-backlog-item], access: write }\n');
+  writeFileSync(join(root, '.factory/workflows/feature.yaml'), 'name: feature\nsteps:\n  - { id: build, kind: agent, role: developer, skills: [implement-backlog-item], access: write }\n');
   writeFileSync(join(root, '.factory/workflows/bad.yaml'), 'name: bad\nsteps:\n  - { id: build, kind: agent, role: ghost, skills: [nothing], access: write }\n');
   item(1, 'risk: high\n');
   commitItems();

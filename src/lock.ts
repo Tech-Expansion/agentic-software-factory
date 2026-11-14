@@ -13,7 +13,7 @@ export const alive = (pid: number) => {
 };
 
 /**
- * One process at a time works on a product: `asf run` and `asf serve` take `.factory/lock`. A lock left by a process
+ * One process at a time works on a product: `asf run` and `asf run --watch` take `.factory/lock`. A lock left by a process
  * that is gone is taken over, so a crash never needs a manual cleanup.
  */
 export function acquire(factory: string, what: string): () => void {

@@ -100,7 +100,7 @@ export interface SyncOptions {
 /**
  * Brings the tracker and the product together, without calling any model: new tickets become items, questions and
  * results are posted, and the owner's answers and decisions are applied. Run it before and after `asf clarify` and
- * `asf run`; `asf serve` does.
+ * `asf run`; `asf run --watch` does.
  */
 export async function sync(opts: SyncOptions = {}): Promise<string[]> {
   const product = openProduct(opts.root);

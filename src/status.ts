@@ -9,7 +9,7 @@ import { day, readEvents } from './runlog.js';
 import { loadLessons } from './retro.js';
 import { loadState, type ItemState } from './state.js';
 
-/** What `asf serve` writes each round, so anyone can see what the team is doing without asking it. */
+/** What `asf run --watch` writes each round, so anyone can see what the team is doing without asking it. */
 export interface Heartbeat {
   pid: number;
   started: string;
@@ -20,7 +20,7 @@ export interface Heartbeat {
   paused_until?: string;
 }
 
-const beatFile = (factory: string) => join(factory, 'serve.json');
+const beatFile = (factory: string) => join(factory, 'watch.json');
 export const writeHeartbeat = (factory: string, h: Heartbeat) => writeFileSync(beatFile(factory), JSON.stringify(h, null, 2) + '\n');
 export const clearHeartbeat = (factory: string) => rmSync(beatFile(factory), { force: true });
 
@@ -88,7 +88,7 @@ export function board(product: Product, now: Date = new Date()): Board {
       const c = loadClarification(paths.factory, item.id);
       const open = c ? openQuestions(c) : [];
       if (c && open.length)
-        decisions.push({ ...base, kind: 'answer', since: c.at, what: `${open.length} question(s): ${open.map((q) => q.id).join(', ')}`, how: reply(item.tracker, '"Q1: <answer>" or "/accept"', `asf decide ${item.id} <Q> <answer>, or asf decide ${item.id} accept`) });
+        decisions.push({ ...base, kind: 'answer', since: c.at, what: `${open.length} question(s): ${open.map((q) => q.id).join(', ')}`, how: reply(item.tracker, '"Q1: <answer>" or "/accept"', `asf show ${item.id}, then asf decide ${item.id} <Q> <answer>, or asf decide ${item.id} accept`) });
       continue;
     }
     if (!st) continue;

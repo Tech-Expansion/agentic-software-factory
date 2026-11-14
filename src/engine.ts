@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { canonicalRole, modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
+import { modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
@@ -91,7 +91,7 @@ function testedFeature(paths: ProductPaths, who: string): Workflow {
 
 /** A specialist's step runs only for a product that turned the specialist on. */
 export const specialistOn = (step: AgentStep, project: ProjectConfig) =>
-  !step.specialist || (project.specialists ?? []).some((r) => canonicalRole(r) === canonicalRole(step.role));
+  !step.specialist || (project.specialists ?? []).includes(step.role);
 
 /** Whether a step with `when` applies to this change: a changed file in one of its paths, or the item's risk. */
 export function stepApplies(step: AgentStep, item: BacklogItem, changed: string[], policy: Policy, project: ProjectConfig): boolean {
@@ -404,7 +404,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
         const v = result.structured as Verdict;
         failed = verdictFails(v, step.id === 'verify' ? 'Verifier' : `Review by the ${step.role}`);
         if (failed) break;
-        if (canonicalRole(step.role) === 'tech-lead') reviewed = true;
+        if (step.role === 'tech-lead') reviewed = true;
         escalated.push(...(v.escalate ?? []).map((e) => `${step.role}: ${e}`));
       }
     }
