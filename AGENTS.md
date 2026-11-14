@@ -24,7 +24,9 @@ For any agent or person changing this repository. What the product is and why: [
   versions in ADR 0003 are updated.
 - Dependencies stay at `yaml` and `ajv` unless an ADR says otherwise.
 - Code, comments, commits and docs are in English. Commits follow Conventional Commits.
-- A decision that is hard to undo gets an ADR in `docs/adr/`.
+- A decision that is hard to undo gets an ADR in `docs/adr/`. ADRs are history: a later one amends an earlier one
+  instead of rewriting it.
+- Before 1.0 nothing is kept for compatibility: rename or remove instead of adding aliases.
 - A change to `agents/`, `skills/`, `workflows/` or the engine that is meant to make the factory better says so with
   `asf eval --trials 3` numbers from before and after. New eval cases come with a `reference/` solution that passes
   `asf eval --reference`, and hidden tests that fail on the untouched fixture. A capability case that the factory
