@@ -14,7 +14,12 @@ Goal: `product/brief.md` filled in, and `hypothesis`, `success_metric` and `kill
 4. Define the smallest version that tests the hypothesis. Name what is out of scope as clearly as what is in.
 5. When the user does not know an answer, offer two to four options with a recommendation and a one-line reason each.
    "Decide for me" is a valid answer: decide, and record it as an assumption.
-6. Summarise the brief back to the user, apply their corrections, then write the files.
+6. Propose the specialists the product needs, with a one-line reason each, and let the user decide: the security
+   reviewer for anything with keys, signing, money, authentication or personal data (and set `sensitive_paths` in
+   `.factory/policy.yaml` to where that code will live); the UX designer for a product with a user interface (and
+   set `paths.ui`). The tech lead reviews every change either way. Write what they agree to under `specialists:` in
+   `.factory/project.yaml`.
+7. Summarise the brief back to the user, apply their corrections, then write the files.
 
 Stop asking when the brief answers: who, what problem, the smallest version, how success is measured, what is out of
 scope. Questions about details belong in the specs.

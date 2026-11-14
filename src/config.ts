@@ -185,3 +185,16 @@ export function runtimeFor(project: ProjectConfig, role: string): RuntimeName {
 export function modelFor(project: ProjectConfig, role: string): string | undefined {
   return byRole(project.models, role);
 }
+
+/**
+ * Specialists the product's own settings call for and that are not on: the security reviewer once there are
+ * sensitive paths (keys, signing, money, auth), the UX designer once there is a `ui` path list. The team suggests;
+ * the client turns one on by adding it to `specialists:`.
+ */
+export function suggestedSpecialists(project: ProjectConfig, policy: Policy): { role: string; why: string }[] {
+  const on = new Set((project.specialists ?? []).map(canonicalRole));
+  const out: { role: string; why: string }[] = [];
+  if (policy.sensitive_paths.length && !on.has('security-reviewer')) out.push({ role: 'security-reviewer', why: `the product has sensitive paths (${policy.sensitive_paths.join(', ')})` });
+  if (project.paths?.ui?.length && !on.has('ux-designer')) out.push({ role: 'ux-designer', why: 'the product has a ui path list' });
+  return out;
+}

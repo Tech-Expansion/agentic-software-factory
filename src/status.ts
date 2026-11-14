@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { loadBacklog, type BacklogItem } from './backlog.js';
 import { loadClarification, openQuestions } from './clarify.js';
 import type { Product } from './commands/context.js';
+import { suggestedSpecialists } from './config.js';
 import { alive } from './lock.js';
 import { day, readEvents } from './runlog.js';
 import { loadLessons } from './retro.js';
@@ -49,6 +50,8 @@ export interface Board {
   team?: Heartbeat;
   columns: Partial<Record<Column, string[]>>;
   decisions: Decision[];
+  /** Specialists the team suggests turning on; not a decision anything waits for. */
+  suggestions: string[];
   tokens: { today: number; week: number };
 }
 
@@ -67,7 +70,7 @@ function column(item: BacklogItem, st: ItemState | undefined, factory: string, r
 
 /** The whole product at a glance: what each item is doing, what waits for the owner, and what the team spent. */
 export function board(product: Product, now: Date = new Date()): Board {
-  const { paths, project } = product;
+  const { paths, project, policy } = product;
   const { items } = loadBacklog(paths.backlog);
   const state = loadState(paths.state);
   const done = new Set(items.filter((i) => i.status === 'done' || state.items[i.id]?.state === 'merged').map((i) => i.id));
@@ -118,7 +121,8 @@ export function board(product: Product, now: Date = new Date()): Board {
   const agentTokens = (date?: string) => readEvents(paths.runs, date).filter((e) => e.kind === 'agent').reduce((n, e) => n + (e.tokens?.total ?? 0), 0);
   let week = 0;
   for (let d = 0; d < 7; d++) week += agentTokens(day(new Date(now.getTime() - d * 86_400_000).toISOString()));
-  return { product: project.name, team: readHeartbeat(paths.factory), columns, decisions, tokens: { today: agentTokens(day(now.toISOString())), week } };
+  const suggestions = suggestedSpecialists(project, policy).map((s) => `${s.role}, because ${s.why}: add it to specialists: in .factory/project.yaml`);
+  return { product: project.name, team: readHeartbeat(paths.factory), columns, decisions, suggestions, tokens: { today: agentTokens(day(now.toISOString())), week } };
 }
 
 export const fmtTokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
@@ -143,6 +147,7 @@ export function formatBoard(b: Board, now: Date = new Date()): string {
   out.push(`## Waiting for you (${b.decisions.length})`, '');
   if (!b.decisions.length) out.push('- nothing');
   for (const d of b.decisions) out.push(`- ${d.item} ${d.title} [${d.kind}, ${ago(d.since, now)}]: ${d.what}`, `  ${d.how}`);
+  if (b.suggestions.length) out.push('', '## Suggested by the team', '', ...b.suggestions.map((s) => `- ${s}`));
   out.push('', `Tokens: ${fmtTokens(b.tokens.today)} today, ${fmtTokens(b.tokens.week)} in the last 7 days`);
   return out.join('\n');
 }

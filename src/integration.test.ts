@@ -258,3 +258,14 @@ test('an infra item is built by DevOps, reviewed by the tech lead, and by the se
   const who = rt.calls.map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
   assert.deepEqual(who, ['the DevOps engineer', 'QA', 'the tech lead', 'the security reviewer']);
 });
+
+test('the team suggests a specialist the settings call for, until the product turns it on', async () => {
+  const { board, formatBoard } = await import('./status.js');
+  const { openProduct } = await import('./commands/context.js');
+  assert.ok(validateProduct().warnings.some((w) => /^suggested specialist: security-reviewer, because the product has sensitive paths \(keys\/\*\*\)/.test(w)));
+  assert.match(formatBoard(board(openProduct())), /## Suggested by the team\n\n- security-reviewer, because/);
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'specialists: [security-reviewer]\n');
+  assert.deepEqual(board(openProduct()).suggestions, []);
+  assert.ok(!validateProduct().warnings.some((w) => /suggested specialist/.test(w)));
+});

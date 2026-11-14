@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadBacklog } from '../backlog.js';
-import { ConfigError, loadPolicy, loadProject } from '../config.js';
+import { ConfigError, loadPolicy, loadProject, suggestedSpecialists, type ProjectConfig } from '../config.js';
 import { findProductRoot, productPaths } from '../paths.js';
 import { loadRole, loadSkill } from '../prompt.js';
 import { loadWorkflow, writesTests } from '../workflow.js';
@@ -19,8 +19,9 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
   const errors: string[] = [];
   const warnings: string[] = [];
   let workflow: string | undefined;
+  let loaded: ProjectConfig | undefined;
   try {
-    const project = loadProject(paths);
+    const project = (loaded = loadProject(paths));
     workflow = project.workflow;
     if (project.factory_version !== version) {
       warnings.push(`project.yaml pins factory ${project.factory_version}, this is ${version}`);
@@ -38,7 +39,8 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
     errors.push(err.message);
   }
   try {
-    loadPolicy(paths);
+    const policy = loadPolicy(paths);
+    for (const s of loaded ? suggestedSpecialists(loaded, policy) : []) warnings.push(`suggested specialist: ${s.role}, because ${s.why}; add it to specialists: in .factory/project.yaml`);
   } catch (err) {
     if (!(err instanceof ConfigError)) throw err;
     errors.push(err.message);
