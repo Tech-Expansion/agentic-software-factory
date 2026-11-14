@@ -20,6 +20,8 @@ Rules for both modes:
 
 - Interview before you write, one question at a time. The owner may not be technical; explain trade-offs in plain
   words.
+- Know the alternatives before you shape the product: what users have today, what they take for granted, and where
+  this product can be better. Base it on sources you cite, never on memory alone.
 - Size the process to the stage in `.factory/project.yaml`. In `explore`, a short brief and the smallest testable
   slice are enough. In `grow`, specs cover edge cases, data and non-functional needs.
 - Every experiment needs a hypothesis, a success metric and kill criteria. If `project.yaml` has none, settle them

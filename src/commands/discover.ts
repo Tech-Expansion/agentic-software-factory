@@ -2,7 +2,7 @@ import { modelFor, runtimeFor } from '../config.js';
 import { systemPrompt } from '../prompt.js';
 import { openProduct, runtimes } from './context.js';
 
-const SKILLS = ['discovery-interview', 'write-feature-spec', 'plan-backlog'];
+const SKILLS = ['discovery-interview', 'market-scan', 'write-feature-spec', 'plan-backlog'];
 
 const OPENING =
   'Start or continue discovery for this product. Read .factory/project.yaml, product/, specs/ and backlog/ first, ' +
