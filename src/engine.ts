@@ -55,7 +55,7 @@ export function rateLimited(r: AgentResult): boolean {
   return LIMIT.test(r.error ?? '');
 }
 
-const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'architect', skills: ['plan-change'], access: 'read' };
+const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'tech-lead', skills: ['plan-change'], access: 'read' };
 
 interface Plan {
   approach: string;

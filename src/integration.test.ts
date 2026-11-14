@@ -20,7 +20,7 @@ process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.in
 const plan = { approach: 'Use CIP-1854 keys.', files: ['src/keys/sign.js'], tests: ['AC-001 a missing gate signature is refused'], risks: ['a wrong key signs'] };
 const pass = { verdict: 'pass', criteria: [], findings: [], summary: 'good' };
 
-/** Each item writes the file its body names; the architect returns a plan. */
+/** Each item writes the file its body names; the tech lead returns a plan. */
 function team(): Runtime & { calls: AgentCall[] } {
   const calls: AgentCall[] = [];
   return {
@@ -29,7 +29,7 @@ function team(): Runtime & { calls: AgentCall[] } {
     async call(c): Promise<AgentResult> {
       calls.push(c);
       const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
-      if (c.systemPrompt.includes('You are the architect')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
+      if (c.systemPrompt.includes('You are the tech lead')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
       if (c.access === 'write' && !c.writeOnly) {
         const file = /writes (\S+)/.exec(c.prompt)![1]!;
         mkdirSync(join(c.cwd, file, '..'), { recursive: true });

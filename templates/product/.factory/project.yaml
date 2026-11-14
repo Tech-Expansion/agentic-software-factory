@@ -19,7 +19,7 @@ runtimes:
   # roles:
   #   qa: codex
 
-# Model per role, passed to the CLI as is. Unset roles use the CLI's default. Roles: product-owner, architect,
+# Model per role, passed to the CLI as is. Unset roles use the CLI's default. Roles: product-owner, tech-lead,
 # developer, qa, security-reviewer, ux-designer, devops, scrum-master.
 # models:
 #   developer: sonnet

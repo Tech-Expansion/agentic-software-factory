@@ -156,7 +156,7 @@ export function loadPolicy(paths: ProductPaths): Policy {
 export const ROLE_ALIASES: Record<string, string> = {
   planner: 'product-owner',
   analyst: 'product-owner',
-  'tech-lead': 'architect',
+  architect: 'tech-lead',
   tester: 'qa',
   builder: 'developer',
   verifier: 'qa',
