@@ -106,6 +106,7 @@ export function answer(id: string, question: string | undefined, text: string, o
 export function questions(root?: string, id?: string): string {
   const product = openProduct(root);
   const { items } = loadBacklog(product.paths.backlog);
+  if (id && !items.some((i) => i.id === id)) throw new UsageError(`no backlog item ${id}`);
   const out: string[] = [];
   for (const item of items.filter((i) => i.status === 'new' && (!id || i.id === id))) {
     const c = loadClarification(product.paths.factory, item.id);

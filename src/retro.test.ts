@@ -110,6 +110,7 @@ test('the tech lead decides the lessons, and the owner can reverse a decision', 
   assert.deepEqual([l1?.status, l1?.decided_by, l1?.applied, l2?.status], ['accepted', 'tech-lead', 'B-0002', 'rejected']);
   assert.ok(logs.includes('L-1 accepted by the tech lead: B-0002'));
   assert.deepEqual(board(p).decisions.map((d) => d.kind), ['review'], 'nothing about lessons waits for the owner');
+  assert.match(board(p).decided.join('\n'), /^L-1 accepted: Write hello\.txt at the root \(a check stops it for good\); asf decide L-1 reject reverses it$/m);
 
   const back = decideLesson(p, 'L-1', 'reject');
   assert.deepEqual([back.status, back.decided_by], ['rejected', 'owner']);

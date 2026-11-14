@@ -1,11 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { parse } from 'yaml';
 import { ConfigError } from './config.js';
 import { GitError } from './git.js';
-import { factoryHome } from './paths.js';
 import { version } from './version.js';
 import { openProduct, UsageError } from './commands/context.js';
 import { board, formatBoard } from './status.js';
@@ -28,8 +24,9 @@ import { validateProduct } from './commands/validate.js';
 const HELP = `asf ${version}: agentic software factory
 
 Every day:
-  asf                               the board: what each item and the team are doing, and every
-                                    decision waiting for you, oldest first (--json for scripts)
+  asf [--json]                      the board: what each item and the team are doing, and every
+                                    decision waiting for you, oldest first
+  asf --date YYYY-MM-DD             the report of one day: done, waiting, next, tokens per step
   asf decide <id> <decision>        give a decision:
                                       asf decide B-0001 approve            a plan, or a change in review
                                       asf decide B-0001 reject <reason>    send it back with feedback
@@ -46,10 +43,6 @@ Setting up:
   asf init [dir] [--name <name>]    create a product skeleton and register it
   asf discover                      plan with the product owner: brief, specs, backlog
   asf validate                      check settings, policy, workflows, backlog and spec links
-  asf clarify [--item <id>] [--again]
-                                    the product owner reads new items and asks what it must know
-  asf sync                          with a tracker: take in new tickets, post questions and
-                                    results, apply the owner's answers and decisions
 
 Shipping:
   asf release [--dry]               merge the integration branch into the base branch
@@ -57,10 +50,13 @@ Shipping:
                                     one; with --yes, run the product's deploy commands for <env>
 
 More:
+  asf clarify [--item <id>] [--again]
+                                    one round of what run --watch does: the product owner reads
+                                    new items and asks what it must know
+  asf sync                          one round of what run --watch does with a tracker: take in
+                                    tickets, post questions and results, apply your replies
   asf show <id>                     an item: its open questions, where its work is, why it stopped;
                                     or a lesson and who decided it
-  asf report [--date YYYY-MM-DD]    daily report, with tokens per step
-  asf projects                      products registered on this machine
   asf eval [--case <id>] [--suite regression|capability] [--trials <k>]
            [--cases <dir>] [--out <file>] [--keep] [--reference]
            [--workflow <name|file>] [--without <step,...>]
@@ -154,6 +150,7 @@ async function main(argv: string[]): Promise<number> {
       return outcomes.some((o) => o.state === 'blocked') ? 2 : 0;
     }
     case 'board': {
+      if (values.date) return console.log(report(values.date)), 0;
       const b = board(openProduct());
       console.log(values.json ? JSON.stringify(b, null, 2) : formatBoard(b));
       return 0;
@@ -196,15 +193,6 @@ async function main(argv: string[]): Promise<number> {
       }
       const r = release();
       console.log(r.items.length ? `released ${r.items.join(', ')} (${r.commit})` : 'nothing to release');
-      return 0;
-    }
-    case 'report':
-      console.log(report(values.date));
-      return 0;
-    case 'projects': {
-      const file = join(factoryHome(), 'projects.yaml');
-      const list = existsSync(file) ? ((parse(readFileSync(file, 'utf8')) as { name: string; path: string }[] | null) ?? []) : [];
-      for (const p of list) console.log(`${p.name}\t${p.path}`);
       return 0;
     }
     case 'eval': {

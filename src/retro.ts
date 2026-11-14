@@ -30,6 +30,7 @@ export interface Lesson extends Omit<Proposed, 'recurs'> {
   note?: string;
   /** Who decided it: the tech lead after the retro, or the owner, who can reverse the tech lead. */
   decided_by?: 'tech-lead' | 'owner';
+  decided_at?: string;
   reason?: string;
 }
 
@@ -197,7 +198,7 @@ export function decideLesson(product: Product, id: string, decision: 'accept' | 
     if (currentBranch(paths.root) !== base || !isClean(paths.root)) throw new UsageError(`check out ${base} with a clean tree first; deciding ${id} commits to it`);
   };
   const decided = () => {
-    Object.assign(l, { decided_by: who.by, reason: who.reason });
+    Object.assign(l, { decided_by: who.by, decided_at: new Date().toISOString(), reason: who.reason });
     saveLessons(paths.factory, lessons);
     appendEvent(paths.runs, { at: new Date().toISOString(), item: l.items[0]!, step: 'lesson', kind: 'item', outcome: l.status, detail: `${l.id} by the ${who.by === 'owner' ? 'owner' : 'tech lead'}${l.applied ? ` → ${l.applied}` : ''}` });
     return l;
