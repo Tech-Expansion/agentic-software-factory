@@ -48,6 +48,10 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
   const { items, errors: backlogErrors } = loadBacklog(paths.backlog);
   errors.push(...backlogErrors);
   const ids = new Set(items.map((i) => i.id));
+  // Building before anyone looked at what users have today risks a product that is no better than it.
+  if (loaded && loaded.stage !== 'grow' && items.some((i) => i.status === 'ready') && !existsSync(join(root, 'product', 'market.md'))) {
+    warnings.push('items are ready but product/market.md is missing: scan the alternatives with the product owner in `asf discover` first');
+  }
   for (const item of items) {
     for (const d of item.depends_on ?? []) if (!ids.has(d)) errors.push(`${item.id}: depends on unknown ${d}`);
     // A spec is optional: a small product lists the criteria in the item itself, as "- AC-001: ...".

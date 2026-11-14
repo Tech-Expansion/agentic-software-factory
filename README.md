@@ -82,8 +82,10 @@ asf init my-idea && cd my-idea
 ```
 
 1. Edit `.factory/project.yaml`. Above all, set `commands.check` once the stack is known: it is the cheapest gate.
-2. `asf discover`: the product owner interviews you and writes `product/brief.md`, `specs/` and `backlog/`. It sets
-   items to `ready` only when you agree. A small product may list the criteria in each item instead of a spec.
+2. `asf discover`: the product owner interviews you, scans the alternatives your users have today (with web search
+   in your CLI, every claim with its source) and writes `product/market.md`, `product/brief.md`, `specs/` and
+   `backlog/`. What it finds shapes the scope: the table stakes, plus the one differentiator the hypothesis rests on.
+   It sets items to `ready` only when you agree. A small product may list the criteria in each item instead of a spec.
 3. `asf validate`: settings, policy, workflows and the links between backlog, specs and criteria.
 4. `asf run` builds the next ready item, `asf run --all` keeps going until one blocks or none is left.
 5. `asf` shows every item and every decision waiting for you, with the command to give it:
@@ -144,8 +146,9 @@ A product shapes its team without changing the factory ([ADR 0009](docs/adr/0009
   container. Codex has no network but can read what its user can; the secret scan before each commit is the
   backstop there. See [ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md).
 - Codex enforces access through its sandbox only; the denied-commands list applies to Claude Code.
-- The product owner's size call (small or normal), and what the tech lead escalates to you, are a model's judgement
-  and not yet measured. SRE (checks after a
+- The product owner's size call (small or normal), what the tech lead escalates to you, and the market scan are a
+  model's judgement and not yet measured. The scan is only as good as the web search in your CLI; unattended agents
+  have no web access at all. SRE (checks after a
   deploy, alerts turned into bugs) is designed, not built. Jira is the only external tracker.
 - On Claude Code the developer runs the checks itself before it may finish (a Stop hook, [ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)); Codex has no such hook and relies on the runner's attempts.
 - A developer call carries a fixed overhead of about 30k input tokens per turn (the CLI's own system prompt and tools),

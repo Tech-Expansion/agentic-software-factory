@@ -269,3 +269,12 @@ test('the team suggests a specialist the settings call for, until the product tu
   assert.deepEqual(board(openProduct()).suggestions, []);
   assert.ok(!validateProduct().warnings.some((w) => /suggested specialist/.test(w)));
 });
+
+test('ready items without a market scan get a warning', () => {
+  const scan = () => validateProduct().warnings.some((w) => /product\/market\.md is missing/.test(w));
+  assert.equal(scan(), false, 'nothing ready yet');
+  item(1);
+  assert.equal(scan(), true);
+  writeFileSync(join(root, 'product/market.md'), '# Market scan (2026-11-14)\n');
+  assert.equal(scan(), false);
+});
