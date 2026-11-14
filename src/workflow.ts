@@ -21,6 +21,8 @@ export interface AgentStep {
    * runs if a changed file matches, or if the item has the given `risk`. Read-only steps only.
    */
   when?: { touches?: string[]; risk?: 'high' };
+  /** A specialist's review: runs only for a product that lists the role under `specialists:` in project.yaml. */
+  specialist?: boolean;
 }
 
 export interface ChecksStep {
@@ -55,6 +57,7 @@ export function loadWorkflow(name: string, without: string[] = [], local?: strin
     if (s.kind !== 'agent' && s.kind !== 'checks') throw new Error(`workflow ${name}: unknown step kind in ${(s as Step).id}`);
     if (s.kind === 'agent' && (!s.role || !Array.isArray(s.skills))) throw new Error(`workflow ${name}: ${s.id} needs role and skills`);
     if (s.kind === 'agent' && s.when && s.access !== 'read') throw new Error(`workflow ${name}: ${s.id} has \`when\`, which only a read-only step may have`);
+    if (s.kind === 'agent' && s.specialist && s.access !== 'read') throw new Error(`workflow ${name}: ${s.id} is a specialist's review, which must be read-only`);
     if (s.kind === 'agent' && s.scope === 'tests' && (s !== wf.steps[0] || s.access !== 'write')) {
       throw new Error(`workflow ${name}: a tests step must be the first step, with write access`);
     }

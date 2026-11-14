@@ -29,7 +29,7 @@ function team(): Runtime & { calls: AgentCall[] } {
     async call(c): Promise<AgentResult> {
       calls.push(c);
       const tokens = { input: 1, cached_input: 0, output: 1, total: 2 };
-      if (c.systemPrompt.includes('You are the tech lead')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
+      if (c.systemPrompt.includes('# Skill: plan-change')) return { ok: true, text: '', structured: plan, tokens, durationMs: 1 };
       if (c.access === 'write' && !c.writeOnly) {
         const file = /writes (\S+)/.exec(c.prompt)![1]!;
         mkdirSync(join(c.cwd, file, '..'), { recursive: true });
@@ -126,7 +126,7 @@ test('a quick item is built without acceptance tests written first', async () =>
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'merged');
   assert.equal(rt.calls.filter((c) => c.writeOnly).length, 0, 'no tester');
-  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'read'], 'build, then verify');
+  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'read', 'read'], 'build, then QA and the tech lead');
 });
 
 test('a quick change to a sensitive path is thrown away and built again, tests first', async () => {
@@ -137,7 +137,7 @@ test('a quick change to a sensitive path is thrown away and built again, tests f
   assert.equal(out?.state, 'review');
   assert.deepEqual(out?.flags, ['keys/sign.txt']);
   assert.deepEqual(rt.calls.map((c) => (c.writeOnly ? 'tests' : c.access)), ['write', 'tests', 'write', 'read', 'read'], 'the quick build was not verified; feature ran from its tests step');
-  assert.match(rt.calls.at(-1)!.systemPrompt, /You are the security reviewer/, 'a change to a sensitive path brings in the security reviewer');
+  assert.match(rt.calls.at(-1)!.systemPrompt, /You are the tech lead/, 'the tech lead reviews it');
   const escalated = readEvents(join(root, '.factory/runs')).find((e) => e.outcome === 'escalated');
   assert.match(escalated?.detail ?? '', /quick touched keys\/sign\.txt; built again through feature/);
 });
@@ -182,22 +182,39 @@ test('a product feature workflow without tests blocks a high-risk item instead o
   assert.equal(rt.calls.length, 0);
 });
 
-test('specialists come in only when the change calls for them', async () => {
+const reviewers = (rt: ReturnType<typeof team>) => rt.calls.filter((c) => c.access === 'read').map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
+
+test('specialists come in only when the product turned them on and the change calls for them', async () => {
   const project = join(root, '.factory/project.yaml');
   writeFileSync(project, readFileSync(project, 'utf8') + 'paths:\n  ui: ["ui/**"]\n');
   item(1, '', 'ui/home.txt');
   item(2, '', 'f2.txt');
+  item(3, '', 'ui/about.txt');
   commitItems();
-  const reviewers = (rt: ReturnType<typeof team>) => rt.calls.filter((c) => c.access === 'read').map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
+  const off = team();
+  await run({ item: 'B-0001', context: { runtime: () => off } });
+  assert.deepEqual(reviewers(off), ['QA', 'the tech lead'], 'no UX designer until the product turns one on');
+
+  writeFileSync(project, readFileSync(project, 'utf8') + 'specialists: [ux-designer]\n');
+  commitItems();
+  assert.deepEqual(validateProduct().errors, []);
   const ui = team();
-  await run({ item: 'B-0001', context: { runtime: () => ui } });
-  assert.deepEqual(reviewers(ui), ['QA', 'the UX designer']);
+  await run({ item: 'B-0003', context: { runtime: () => ui } });
+  assert.deepEqual(reviewers(ui), ['QA', 'the tech lead', 'the UX designer']);
   const plain = team();
   await run({ item: 'B-0002', context: { runtime: () => plain } });
-  assert.deepEqual(reviewers(plain), ['QA'], 'no specialist for a plain change');
+  assert.deepEqual(reviewers(plain), ['QA', 'the tech lead'], 'no specialist for a change that does not call for one');
 });
 
-test('an infra item is built by DevOps and always reviewed for security, and waits for the owner', async () => {
+test('an unknown specialist is a validation error', () => {
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'specialists: [pen-tester]\n');
+  assert.deepEqual(validateProduct().errors, ['project.yaml specialists: unknown role: pen-tester']);
+});
+
+test('an infra item is built by DevOps, reviewed by the tech lead, and by the security reviewer once it is on', async () => {
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'specialists: [security-reviewer]\n');
   item(1, 'workflow: infra\n', '.github/workflows/ci.yml');
   commitItems();
   assert.deepEqual(validateProduct().errors, []);
@@ -206,5 +223,5 @@ test('an infra item is built by DevOps and always reviewed for security, and wai
   assert.equal(out?.state, 'review', 'CI files are approval paths');
   assert.deepEqual(out?.flags, ['.github/workflows/ci.yml']);
   const who = rt.calls.map((c) => /^# Your role\n\nYou are ([^.]+?) of /.exec(c.systemPrompt)![1]);
-  assert.deepEqual(who, ['the DevOps engineer', 'QA', 'the security reviewer']);
+  assert.deepEqual(who, ['the DevOps engineer', 'QA', 'the tech lead', 'the security reviewer']);
 });

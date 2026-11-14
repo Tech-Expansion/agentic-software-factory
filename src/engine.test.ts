@@ -76,9 +76,11 @@ test('an item that passes checks and review waits for approval, and approve merg
   const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi\n' } } : { structured: verdict(true) }));
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
-  assert.equal(rt.calls.length, 2);
+  assert.equal(rt.calls.length, 3);
   assert.match(rt.calls[1]!.prompt, /hello\.txt/, 'the verifier sees the diff');
   assert.ok(rt.calls[1]!.schema, 'the verifier is asked for a verdict');
+  assert.match(rt.calls[2]!.systemPrompt, /You are the tech lead[\s\S]*# Skill: review-code/, 'then the tech lead reviews the code');
+  assert.match(rt.calls[2]!.prompt, /hello\.txt/, 'the tech lead sees the diff');
   assert.equal(existsSync(join(root, 'hello.txt')), false, 'nothing lands on main before approval');
 
   approve('B-0001');
@@ -93,9 +95,9 @@ test('failed checks go back to the builder with the output, without a model revi
   const rt = fake((c, n) => (c.access === 'write' ? (n === 1 ? { write: { 'other.txt': 'x' } } : { write: { 'hello.txt': 'hi' } }) : { structured: verdict(true) }));
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
-  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'write', 'read', 'read']);
+  assert.deepEqual(rt.calls.map((c) => c.access), ['write', 'write', 'read', 'read', 'read']);
   assert.match(rt.calls[1]!.prompt, /The checks failed/);
-  assert.match(rt.calls[3]!.systemPrompt, /retrospective/, 'a second attempt gets a retro');
+  assert.match(rt.calls[4]!.systemPrompt, /retrospective/, 'a second attempt gets a retro');
 });
 
 test('an item that keeps failing review is blocked after max_attempts', async () => {
@@ -187,7 +189,7 @@ test('the tests are written once: a rejected item keeps them', async () => {
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
   assert.equal(rt.testerCalls.length, 1);
-  assert.match(rt.calls[2]!.prompt, /Acceptance tests \(locked\)/);
+  assert.match(rt.calls[3]!.prompt, /Acceptance tests \(locked\)/);
 });
 
 test('a runtime error blocks at once instead of retrying', async () => {
@@ -220,5 +222,5 @@ test('a rejected item runs again with the reason as feedback', async () => {
   assert.equal(loadState(join(root, '.factory/state.json')).items['B-0001']?.state, 'rework');
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'review');
-  assert.match(rt.calls[2]!.prompt, /Rejected by the user: say hello in Vietnamese/);
+  assert.match(rt.calls[3]!.prompt, /Rejected by the user: say hello in Vietnamese/);
 });

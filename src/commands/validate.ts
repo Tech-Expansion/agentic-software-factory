@@ -26,6 +26,13 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
       warnings.push(`project.yaml pins factory ${project.factory_version}, this is ${version}`);
     }
     if (!project.commands.check.length) warnings.push('commands.check is empty: nothing but a model checks the work');
+    for (const role of project.specialists ?? []) {
+      try {
+        loadRole(role, paths.factory);
+      } catch (err) {
+        errors.push(`project.yaml specialists: ${(err as Error).message}`);
+      }
+    }
   } catch (err) {
     if (!(err instanceof ConfigError)) throw err;
     errors.push(err.message);

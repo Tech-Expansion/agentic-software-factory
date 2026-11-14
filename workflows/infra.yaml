@@ -1,7 +1,7 @@
 # Infrastructure and delivery: CI, container images, infrastructure as code, deploy scripts. DevOps builds it, the
-# checks run, QA judges the criteria and the security reviewer always reviews it, because these files decide what
-# runs with the owner's credentials. Chosen per item (`workflow: infra`, or the label asf-infra on the ticket).
-# Deploying is not a step: the owner runs `asf deploy <env>`.
+# checks run, QA judges the criteria and the tech lead reviews it, with the checklist for what runs with the client's
+# credentials. A product that turns on the security reviewer gets it on every infra change. Chosen per item
+# (`workflow: infra`, or the label asf-infra on the ticket). Deploying is not a step: the client runs `asf deploy <env>`.
 name: infra
 steps:
   - id: build
@@ -17,9 +17,16 @@ steps:
     skills: [verify-against-criteria]
     access: read
     output: verdict
+  - id: review
+    kind: agent
+    role: tech-lead
+    skills: [review-code]
+    access: read
+    output: verdict
   - id: security
     kind: agent
     role: security-reviewer
     skills: [review-security]
     access: read
     output: verdict
+    specialist: true

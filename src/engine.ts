@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
-import { modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
+import { canonicalRole, modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
 import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
@@ -84,6 +84,10 @@ function testedFeature(paths: ProductPaths, who: string): Workflow {
   if (!writesTests(wf)) throw new Error(`the product's feature workflow has no tests step, and ${who} gets acceptance tests first`);
   return wf;
 }
+
+/** A specialist's step runs only for a product that turned the specialist on. */
+export const specialistOn = (step: AgentStep, project: ProjectConfig) =>
+  !step.specialist || (project.specialists ?? []).some((r) => canonicalRole(r) === canonicalRole(step.role));
 
 /** Whether a step with `when` applies to this change: a changed file in one of its paths, or the item's risk. */
 export function stepApplies(step: AgentStep, item: BacklogItem, changed: string[], policy: Policy, project: ProjectConfig): boolean {
@@ -323,6 +327,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
         continue;
       }
 
+      if (!specialistOn(step, project)) continue;
       if (step.when && !stepApplies(step, item, stageAndList(worktree, base), policy, project)) {
         log(`${item.id} attempt ${attempt} ${step.id}: not needed for this change`);
         continue;

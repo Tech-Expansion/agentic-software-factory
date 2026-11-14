@@ -1,6 +1,7 @@
-# A small, clear change: no acceptance tests written first, so two agent calls fewer than feature. Chosen by the
-# owner per item (`workflow: quick`, or the label asf-quick on the ticket). A high-risk item never runs it, and a
-# quick change that touches a sensitive path is thrown away and built again through feature, tests first.
+# A small, clear change: no acceptance tests written first, so one agent call fewer than feature. The product owner
+# picks it for an item it sizes small, or the item asks for it (`workflow: quick`, or the label asf-quick on the
+# ticket). A high-risk item never runs it, and a quick change that touches a sensitive path is thrown away and built
+# again through feature, tests first. The tech lead still reviews every change.
 name: quick
 steps:
   - id: build
@@ -16,12 +17,19 @@ steps:
     skills: [verify-against-criteria]
     access: read
     output: verdict
+  - id: review
+    kind: agent
+    role: tech-lead
+    skills: [review-code]
+    access: read
+    output: verdict
   - id: security
     kind: agent
     role: security-reviewer
     skills: [review-security]
     access: read
     output: verdict
+    specialist: true
     when: { touches: [sensitive, approval], risk: high }
   - id: ux
     kind: agent
@@ -29,4 +37,5 @@ steps:
     skills: [review-ux]
     access: read
     output: verdict
+    specialist: true
     when: { touches: [ui] }

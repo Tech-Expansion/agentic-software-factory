@@ -28,7 +28,10 @@ runtimes:
 # .factory/workflows/<name>.yaml replaces the factory's workflow of that name.
 # workflow: feature
 
-# Named path lists that bring in a specialist. ui turns on the UX designer's review for changes under it.
+# Specialist reviewers, off until you turn them on. The tech lead reviews every change either way. The security
+# reviewer then checks changes to sensitive and approval paths and high-risk items; the UX designer checks changes
+# under paths.ui. The product owner suggests them in `asf discover`, and `asf validate` when the settings call for one.
+# specialists: [security-reviewer, ux-designer]
 # paths:
 #   ui: ["src/ui/**"]
 

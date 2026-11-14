@@ -1,7 +1,8 @@
 # Build one backlog item. Acceptance tests are written first, from the criteria, by an agent that does not build;
 # they are committed and locked. A failing step after that sends the item back to `build` with the failure as
-# feedback, up to the policy's max_attempts. Cheap checks run before the model review. The security reviewer and the
-# UX designer come in only when the change calls for them (`when`); `paths.ui` in project.yaml turns the UX review on.
+# feedback, up to the policy's max_attempts. Cheap checks run before the model reviews: QA judges the criteria, then
+# the tech lead reviews the code. The security reviewer and the UX designer are specialists a product turns on
+# (`specialists:` in project.yaml), and then come in only when the change calls for them (`when`).
 name: feature
 steps:
   - id: tests
@@ -23,12 +24,19 @@ steps:
     skills: [verify-against-criteria]
     access: read
     output: verdict
+  - id: review
+    kind: agent
+    role: tech-lead
+    skills: [review-code]
+    access: read
+    output: verdict
   - id: security
     kind: agent
     role: security-reviewer
     skills: [review-security]
     access: read
     output: verdict
+    specialist: true
     when: { touches: [sensitive, approval], risk: high }
   - id: ux
     kind: agent
@@ -36,4 +44,5 @@ steps:
     skills: [review-ux]
     access: read
     output: verdict
+    specialist: true
     when: { touches: [ui] }

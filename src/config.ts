@@ -28,6 +28,8 @@ export interface ProjectConfig {
   workflow?: string;
   /** Named path lists a workflow step's `when.touches` can use, for example `ui` for the UX designer's review. */
   paths?: Record<string, string[]>;
+  /** Specialist reviewers the product turns on (security-reviewer, ux-designer); their steps are skipped otherwise. */
+  specialists?: string[];
   /** Commands per environment for `asf deploy <env>`, run by the runner with the owner's own environment. */
   deploy?: Record<string, string[]>;
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
