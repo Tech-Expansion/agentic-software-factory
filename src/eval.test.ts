@@ -8,8 +8,6 @@ import { wilson } from './eval.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
-// These tests are about the engine's logic; sandbox.test.ts covers the sandbox.
-process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 
 const put = (file: string, text: string) => {
   mkdirSync(dirname(file), { recursive: true });
@@ -23,19 +21,19 @@ base_branch: main
 runtimes:
   default: claude-code
 commands:
-  check: ["test -f hello.txt"]
+  check: ["node -e \\"fs.accessSync('hello.txt')\\""]
 opt_ins:
   notifications: none
 `;
 
 /** Two items: B-0001 is ready, B-0002 is still a draft and must never be built. */
 function makeCase(dir: string, id: string) {
-  put(join(dir, id, 'case.yaml'), `id: ${id}\nkind: build\nstack: shell\ndescription: say hi\nsuite: regression\nhidden:\n  check: ["sh hidden-check.sh"]\n`);
+  put(join(dir, id, 'case.yaml'), `id: ${id}\nkind: build\nstack: shell\ndescription: say hi\nsuite: regression\nhidden:\n  check: ["node hidden-check.js"]\n`);
   put(join(dir, id, 'product/.factory/project.yaml'), project(id));
   put(join(dir, id, 'product/specs/hello.md'), '# Hello\n\n## Acceptance criteria\n- AC-001: hello.txt says hi.\n');
   put(join(dir, id, 'product/backlog/0001-hello.md'), '---\nid: B-0001\ntitle: Say hi\nstatus: ready\nspec: specs/hello.md\ncriteria: [AC-001]\n---\nWrite hi to hello.txt.\n');
   put(join(dir, id, 'product/backlog/0002-later.md'), '---\nid: B-0002\ntitle: Later\nstatus: draft\n---\nNot yet.\n');
-  put(join(dir, id, 'hidden/hidden-check.sh'), 'test "$(cat hello.txt)" = hi\n');
+  put(join(dir, id, 'hidden/hidden-check.js'), "process.exit(require('node:fs').readFileSync('hello.txt', 'utf8').trim() === 'hi' ? 0 : 1);\n");
 }
 
 const pass = { verdict: 'pass', criteria: [{ id: 'AC-001', status: 'met', evidence: 'ok' }], findings: [], summary: 'ok' };
@@ -100,7 +98,7 @@ test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', 
   assert.deepEqual(r.summary.suites.regression && { all: r.summary.suites.regression.passAll, any: r.summary.suites.regression.passAny }, { all: 1, any: 2 });
   assert.deepEqual(r.cases.map((c) => `${c.id}#${c.trial}:${c.delivered}`), ['flaky#1:true', 'flaky#2:false', 'flaky#3:false', 'steady#1:true', 'steady#2:true', 'steady#3:true']);
   const t = r.cases[0]!.transcripts!;
-  assert.match(t, /r-transcripts\/flaky-t1$/);
+  assert.match(t, /r-transcripts[\\/]flaky-t1$/);
   assert.equal(readFileSync(join(t, 'B-0001', 'a1-build.jsonl'), 'utf8'), '{"type":"result"}\n');
   assert.ok(existsSync(join(t, 'B-0001', 'a1-tests.jsonl')));
 });
@@ -164,7 +162,7 @@ test('eval: a clarify case is scored on the gaps it covers, and nothing is built
 
 test('eval: an invalid case is refused before anything runs', async () => {
   const cases = mkdtempSync(join(tmpdir(), 'asf-cases-'));
-  put(join(cases, 'x', 'case.yaml'), 'id: y\nkind: build\nstack: s\ndescription: d\nsuite: regression\nhidden:\n  check: ["true"]\n');
+  put(join(cases, 'x', 'case.yaml'), 'id: y\nkind: build\nstack: s\ndescription: d\nsuite: regression\nhidden:\n  check: ["exit 0"]\n');
   put(join(cases, 'x', 'product/README.md'), '');
   await assert.rejects(evaluate({ cases }), /does not match its folder/);
 });

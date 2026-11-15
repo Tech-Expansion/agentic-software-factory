@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { parse } from 'yaml';
 import { nextReady, parseItem, setStatus } from './backlog.js';
-import { loadDefaultPolicy, mergePolicy, validate } from './config.js';
+import { loadDefaultPolicy, mergePolicy, validate, vendorSchema } from './config.js';
 import { verdictFails } from './engine.js';
 import { loadCases } from './eval.js';
 import { matchesAny } from './glob.js';
 import { factoryRoot } from './paths.js';
+import { budgetTokens } from './runlog.js';
+import { exec } from './runtimes/exec.js';
 import { claudeArgs, parseClaudeOutput } from './runtimes/claude.js';
 import { codexArgs, parseCodexEvents } from './runtimes/codex.js';
 import type { AgentCall } from './runtimes/types.js';
@@ -89,10 +91,10 @@ test('claude adapter: never --bare, write tools only with write access, denials 
   assert.ok(!w.includes('--bare'));
   const allowed = w[w.indexOf('--allowedTools') + 1]!;
   assert.match(allowed, /Edit/);
-  assert.match(allowed, /Bash\(npm test:\*\)/);
+  assert.match(allowed, /(^|,)Bash(,|$)/, 'without a sandbox, any command the policy does not deny');
   assert.match(w[w.indexOf('--disallowedTools') + 1]!, /Bash\(git push:\*\).*Edit\(specs\/\*\*\)/);
   const r = claudeArgs(call({ access: 'read', schema: { type: 'object' } }));
-  assert.doesNotMatch(r[r.indexOf('--allowedTools') + 1]!, /Edit|npm test/);
+  assert.doesNotMatch(r[r.indexOf('--allowedTools') + 1]!, /Edit|(^|,)Bash(,|$)/);
   assert.equal(r[r.indexOf('--json-schema') + 1], '{"type":"object"}');
 });
 
@@ -113,6 +115,50 @@ test('claude adapter: usage and structured output are read from the result', () 
   assert.deepEqual(out.tokens, { input: 102, cached_input: 50, output: 10, total: 162 });
   assert.deepEqual(out.structured, { verdict: 'pass' });
   assert.equal(parseClaudeOutput('not json').ok, false);
+});
+
+test('claude adapter: a stream cut off before its result still counts what it used', () => {
+  const message = (id: string, usage: object) => JSON.stringify({ type: 'assistant', message: { id, usage } });
+  const first = { input_tokens: 2, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, output_tokens: 1 };
+  const second = { input_tokens: 2, cache_creation_input_tokens: 10, cache_read_input_tokens: 102, output_tokens: 3 };
+  // One message arrives as several events with the same usage; the last line was cut off by the timeout.
+  const out = parseClaudeOutput([message('m1', first), message('m1', first), message('m2', second), '{"type":"assis'].join('\n'));
+  assert.equal(out.ok, false);
+  assert.deepEqual(out.tokens, { input: 114, cached_input: 102, output: 4, total: 220 });
+});
+
+test('schemas: what a CLI is sent never requires a field it no longer allows', () => {
+  const missing: string[] = [];
+  const walk = (s: unknown, where: string): void => {
+    if (!s || typeof s !== 'object') return;
+    const { required, properties } = s as { required?: string[]; properties?: Record<string, unknown> };
+    if (Array.isArray(required) && properties) for (const r of required) if (!(r in properties)) missing.push(`${where}: ${r}`);
+    for (const [k, v] of Object.entries(s)) walk(v, `${where}/${k}`);
+  };
+  for (const file of readdirSync(join(factoryRoot, 'schemas'))) walk(vendorSchema(file.replace('.schema.json', '')), file);
+  assert.deepEqual(missing, []);
+  const lesson = (vendorSchema('lessons') as { properties: { lessons: { items: { properties: Record<string, object> } } } }).properties.lessons.items;
+  assert.ok(lesson.properties.title, 'a field named like a keyword stays');
+  assert.equal('minLength' in lesson.properties.title!, false, 'and the keywords inside it still go');
+  assert.equal('title' in vendorSchema('lessons'), false);
+});
+
+test('budget: a token read from the cache counts as a tenth', () => {
+  assert.equal(budgetTokens({ input: 100, cached_input: 6_000_005, output: 10, total: 6_000_115 }), 600_111);
+});
+
+test('exec: a command that ignores the timeout is killed, and what it printed is kept', async () => {
+  const stubborn = "process.on('SIGTERM', () => {}); console.log('started'); setInterval(() => {}, 1000);";
+  const r = await exec(process.execPath, ['-e', stubborn], { cwd: tmpdir(), input: '', timeoutMs: 2000, killAfterMs: 200 });
+  assert.equal(r.timedOut, true);
+  assert.match(r.stdout, /started/);
+  assert.ok(r.durationMs < 10_000, `gave up after ${r.durationMs} ms`);
+});
+
+test('exec: a command that is not installed is an error, not a crash', async () => {
+  const r = await exec('asf-no-such-command', [], { cwd: tmpdir(), input: 'x'.repeat(100_000), timeoutMs: 5000 });
+  assert.equal(r.code, null);
+  assert.match(r.stderr, /ENOENT/);
 });
 
 test('codex adapter: sandbox follows access, usage is summed over turns', () => {

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import type { SandboxPolicy } from './config.js';
 import { tail } from './runtimes/exec.js';
-import { sandboxed, sandboxOff, scrubEnv, toolchainEnv } from './sandbox.js';
+import { sandboxed, scrubEnv, toolchainEnv } from './sandbox.js';
 
 export interface CheckResult {
   command: string;
@@ -12,12 +12,12 @@ export interface CheckResult {
 
 /**
  * Runs the product's own commands in order and stops at the first failure. No model is involved, but the commands
- * run code the agents wrote, so they get no secrets in their environment and, with a sandbox policy, run in the
- * sandbox. `allowEnv` names the only secrets they may see, for a dev deploy.
+ * run code the agents wrote, so they get no secrets in their environment and, when the sandbox is on, run in it.
+ * `allowEnv` names the only secrets they may see, for a dev deploy.
  */
 export function runChecks(cwd: string, commands: string[], sandbox?: SandboxPolicy, timeoutMs = 15 * 60_000, allowEnv: string[] = []): CheckResult[] {
   const results: CheckResult[] = [];
-  const env = { ...scrubEnv(process.env, sandbox?.secret_env ?? [], allowEnv), ...(sandbox && !sandboxOff() ? toolchainEnv(sandbox) : {}) };
+  const env = { ...scrubEnv(process.env, sandbox?.secret_env ?? [], allowEnv), ...(sandbox?.enabled ? toolchainEnv(sandbox) : {}) };
   for (const command of commands) {
     const started = Date.now();
     const { cmd, args, shell } = sandboxed(command, sandbox);

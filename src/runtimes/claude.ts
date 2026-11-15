@@ -1,5 +1,6 @@
-import { claudeSandbox, prepareWritable, sandboxOff, toolchainEnv } from '../sandbox.js';
+import { claudeSandbox, prepareWritable, requireSandbox, toolchainEnv } from '../sandbox.js';
 import { exec, interactive, tail } from './exec.js';
+import type { Tokens } from '../runlog.js';
 import { noTokens, type AgentCall, type AgentResult, type RateLimit, type Runtime } from './types.js';
 
 const READ_TOOLS = ['Read', 'Glob', 'Grep', 'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)'];
@@ -26,22 +27,24 @@ interface ClaudeJson {
  * toolchain variables are set on the process itself as well.
  */
 export function claudeEnv(c: AgentCall, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  return c.sandbox && !sandboxOff() ? { ...env, ...toolchainEnv(c.sandbox) } : env;
+  return c.sandbox?.enabled ? { ...env, ...toolchainEnv(c.sandbox) } : env;
 }
 
 /** Builds the argument list. Exported for tests; see ADR 0003 for why each flag is there. */
 export function claudeArgs(c: AgentCall): string[] {
+  const sandbox = c.sandbox?.enabled ? c.sandbox : undefined;
   const allowed = [...READ_TOOLS];
   if (c.access === 'write') {
     const write = c.writeOnly ? c.writeOnly.flatMap((g) => WRITE_TOOLS.map((t) => `${t}(${g})`)) : WRITE_TOOLS;
-    allowed.push(...write, ...c.allowedCommands.map((cmd) => `Bash(${cmd}:*)`));
+    // In the sandbox every command is allowed, because the sandbox holds it. Without one the agent may run any
+    // command the policy does not deny: it needs more than the checks to build (installing a dependency, say).
+    allowed.push(...write, ...(sandbox ? c.allowedCommands.map((cmd) => `Bash(${cmd}:*)`) : ['Bash']));
   }
-  const sandbox = c.sandbox && !sandboxOff() ? c.sandbox : undefined;
   const denied = [
     ...c.deniedCommands.map((cmd) => `Bash(${cmd}:*)`),
     ...c.protectedPaths.flatMap((p) => [`Edit(${p})`, `Write(${p})`]),
-    // The Read tool is not sandboxed, so the paths the sandbox hides are denied to it as well.
-    ...(sandbox?.deny_read ?? []).flatMap((p) => [`Read(${p})`, `Read(${p}/**)`]),
+    // The Read tool is never sandboxed, so the paths the sandbox would hide are denied to it either way.
+    ...(c.sandbox?.deny_read ?? []).flatMap((p) => [`Read(${p})`, `Read(${p}/**)`]),
   ];
   const settings: Record<string, object> = {};
   if (sandbox) {
@@ -81,6 +84,33 @@ export function parseRateLimit(lines: unknown[]): RateLimit | undefined {
   return { status: ev.status ?? 'unknown', resetsAt: ev.resetsAt ?? tight?.resetsAt, utilization: tight?.utilization };
 }
 
+function toTokens(u: NonNullable<ClaudeJson['usage']>): Tokens {
+  const input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  const cached = u.cache_read_input_tokens ?? 0;
+  const output = u.output_tokens ?? 0;
+  return { input, cached_input: cached, output, total: input + cached + output };
+}
+
+/**
+ * What a stream without a result used (a timeout, a crash), summed over its assistant messages. Input and cache
+ * counts are exact. Output is a lower bound: a message's event is sent before its output is complete.
+ */
+function streamedTokens(lines: unknown[]): Tokens {
+  const byMessage = new Map<string, NonNullable<ClaudeJson['usage']>>();
+  for (const l of lines as { type?: string; message?: { id?: string; usage?: ClaudeJson['usage'] } }[]) {
+    if (l?.type === 'assistant' && l.message?.id && l.message.usage) byMessage.set(l.message.id, l.message.usage);
+  }
+  const sum = noTokens();
+  for (const u of byMessage.values()) {
+    const t = toTokens(u);
+    sum.input += t.input;
+    sum.cached_input += t.cached_input;
+    sum.output += t.output;
+    sum.total += t.total;
+  }
+  return sum;
+}
+
 /** Reads `--output-format stream-json` (one event per line, the result last) or a single JSON result. */
 export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs'> {
   const lines: unknown[] = [];
@@ -96,12 +126,8 @@ export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs
     | ClaudeJson
     | undefined;
   const rateLimit = parseRateLimit(lines);
-  if (!data) return { ok: false, text: '', tokens: noTokens(), rateLimit, error: `unreadable output: ${tail(stdout, 500)}` };
-  const u = data.usage ?? {};
-  const input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-  const cached = u.cache_read_input_tokens ?? 0;
-  const output = u.output_tokens ?? 0;
-  const tokens = { input, cached_input: cached, output, total: input + cached + output };
+  if (!data) return { ok: false, text: '', tokens: streamedTokens(lines), rateLimit, error: `unreadable output: ${tail(stdout, 500)}` };
+  const tokens = toTokens(data.usage ?? {});
   const ok = !data.is_error && data.subtype !== 'error';
   const denied = (data.permission_denials ?? []).map((d) => `${d.tool_name ?? '?'}: ${d.tool_input?.command ?? d.tool_input?.file_path ?? ''}`.trim());
   return {
@@ -119,9 +145,14 @@ export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs
 export const claudeCode: Runtime = {
   name: 'claude-code',
   async call(c) {
-    if (c.sandbox && !sandboxOff()) prepareWritable(c.sandbox);
+    requireSandbox(c.sandbox);
+    if (c.sandbox?.enabled) prepareWritable(c.sandbox);
     const r = await exec('claude', claudeArgs(c), { cwd: c.cwd, input: c.prompt, timeoutMs: c.timeoutMs ?? 30 * 60_000, env: claudeEnv(c) });
-    if (r.timedOut) return { ok: false, text: '', tokens: noTokens(), durationMs: r.durationMs, error: 'timed out' };
+    // What was spent before the timeout still counts, and the transcript is what shows why the step ran so long.
+    if (r.timedOut) {
+      const partial = parseClaudeOutput(r.stdout);
+      return { ok: false, text: '', tokens: partial.tokens, rateLimit: partial.rateLimit, durationMs: r.durationMs, transcript: r.stdout, error: 'timed out' };
+    }
     const parsed = { ...parseClaudeOutput(r.stdout), transcript: r.stdout };
     if (r.code !== 0 && parsed.ok) {
       return { ...parsed, ok: false, durationMs: r.durationMs, error: `exit ${r.code}: ${tail(r.stderr, 1000)}` };

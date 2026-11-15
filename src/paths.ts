@@ -1,7 +1,10 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/** A path inside the repository as people, trackers and committed files see it: "/" on every platform. */
+export const repoPath = (root: string, file: string) => relative(root, file).split(sep).join('/');
 
 /** Root of the installed factory: agents/, skills/, workflows/, policies/, templates/, schemas/. */
 export const factoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');

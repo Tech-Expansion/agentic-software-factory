@@ -1,11 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { loadBacklog, type BacklogItem } from '../backlog.js';
 import { loadClarification, type Clarification } from '../clarify.js';
 import type { TrackedState } from '../config.js';
 import { commitFiles, currentBranch, isClean } from '../git.js';
 import { appendEvent, day } from '../runlog.js';
 import { board, formatBoard } from '../status.js';
+import { repoPath } from '../paths.js';
 import { loadState } from '../state.js';
 import { jira } from '../tracker/jira.js';
 import type { Tracker } from '../tracker/types.js';
@@ -155,7 +156,7 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
     save();
     await move(t.key, 'clarifying');
     event(id, 'taken in', t.key);
-    say(`${t.key} → ${id} (${relative(paths.root, file)})`);
+    say(`${t.key} → ${id} (${repoPath(paths.root, file)})`);
     items = loadBacklog(paths.backlog).items;
   }
 
@@ -183,7 +184,7 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
             for (const [q, a] of Object.entries(answers)) out = answer(item.id, q, a, { root: paths.root });
             if (accept) out = answer(item.id, undefined, '', { accept: true, root: paths.root });
             if (out?.ready) {
-              await tracker.comment(link.key, `${MARK} ${item.id} is clear to build. The decisions are in ${relative(paths.root, item.file)}.`);
+              await tracker.comment(link.key, `${MARK} ${item.id} is clear to build. The decisions are in ${repoPath(paths.root, item.file)}.`);
               await tracker.label(link.key, [], [NEEDS_PO]);
               await move(link.key, 'ready');
               link.shown = 'ready';

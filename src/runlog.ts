@@ -8,6 +8,12 @@ export interface Tokens {
   total: number;
 }
 
+/**
+ * What a step counts against an item's token budget. A token read from the cache costs about a tenth of a fresh one,
+ * and a long session reads the cache on every turn: counted in full, one ordinary build is several million tokens.
+ */
+export const budgetTokens = (t: Tokens) => t.input + t.output + Math.ceil(t.cached_input / 10);
+
 export interface RunEvent {
   at: string;
   item: string;

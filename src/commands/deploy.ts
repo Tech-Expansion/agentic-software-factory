@@ -67,7 +67,7 @@ export function deploy(env: string, opts: { yes?: boolean; root?: string } = {})
   const started = Date.now();
   const cwd = deployTree(paths, env, commit);
   for (const command of commands) {
-    const r = spawnSync('sh', ['-c', command], { cwd, stdio: 'inherit', env: process.env });
+    const r = spawnSync(command, { shell: true, cwd, stdio: 'inherit', env: process.env });
     if (r.status !== 0) {
       record(paths, env, commit, started, `${command} exited ${r.status ?? r.signal}`);
       return { env, commit, ran: true, ok: false, text: `deploy to ${env} failed: \`${command}\` exited ${r.status ?? r.signal}` };

@@ -11,7 +11,10 @@ export interface ItemState {
   branch: string;
   worktree: string;
   attempts: number;
+  /** Counted against the item's budget (see `budgetTokens`); the run log holds what each step really used. */
   tokens: number;
+  /** The setup commands passed in this worktree. */
+  setup?: boolean;
   reason?: string;
   feedback?: string;
   flags?: string[];

@@ -13,7 +13,6 @@ import { loadState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
-process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'asf test';
 process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.invalid';
 
@@ -84,7 +83,7 @@ test('items that pass merge into main on their own; the owner releases them to p
   assert.deepEqual(release().items, [], 'nothing left to release');
 });
 
-test('with a remote, the release is a pull request the owner merges, and the items are done once it is', async () => {
+test('with a remote, the release is a pull request the owner merges, and the items are done once it is', { skip: process.platform === 'win32' && 'the fake gh is a shell script; Windows starts only .exe files without a shell' }, async () => {
   const remote = mkdtempSync(join(tmpdir(), 'asf-remote-'));
   git(remote, ['init', '-q', '--bare']);
   git(root, ['remote', 'add', 'origin', remote]);
@@ -118,10 +117,12 @@ test('with a remote, the release is a pull request the owner merges, and the ite
   assert.deepEqual(loadState(join(root, '.factory/state.json')).items, {});
 });
 
-test('dev deploys itself after each merge, sandboxed, seeing only the secrets it was given', async () => {
+test('dev deploys itself after each merge, seeing only the secrets it was given', async () => {
   const log = join(mkdtempSync(join(tmpdir(), 'asf-dev-')), 'log');
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8') + `dev_deploy:\n  run: commands\n  env: [DEV_DEPLOY_TOKEN]\ndeploy:\n  dev: ['echo "$(cat f1.txt) $DEV_DEPLOY_TOKEN \${OTHER_TOKEN:-hidden}" >> ${log}']\n`);
+  // Written for any platform's shell: f1.txt, the allowed secret, and "hidden" unless the other secret got through.
+  const command = `node -e "fs.appendFileSync(process.argv[1], fs.readFileSync('f1.txt', 'utf8').trim() + ' ' + process.env.DEV_DEPLOY_TOKEN + ' ' + (process.env.OTHER_TOKEN || 'hidden') + '\\n')" ${log}`;
+  writeFileSync(project, readFileSync(project, 'utf8') + `dev_deploy:\n  run: commands\n  env: [DEV_DEPLOY_TOKEN]\ndeploy:\n  dev: ${JSON.stringify([command])}\n`);
   process.env.DEV_DEPLOY_TOKEN = 'dev-token';
   process.env.OTHER_TOKEN = 'not-for-dev';
   try {

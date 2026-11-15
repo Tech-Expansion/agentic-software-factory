@@ -19,8 +19,8 @@ beforeEach(() => {
   out = join(mkdtempSync(join(tmpdir(), 'asf-deploy-')), 'log');
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8') + `deploy:\n  staging: ["./deploy.sh staging"]\n  broken: ["exit 3"]\n`);
-  writeFileSync(join(root, 'deploy.sh'), `#!/bin/sh\necho "$1 with $DEPLOY_TOKEN" >> "$DEPLOY_LOG"\n`, { mode: 0o755 });
+  writeFileSync(project, readFileSync(project, 'utf8') + `deploy:\n  staging: ["node deploy.js staging"]\n  broken: ["exit 3"]\n`);
+  writeFileSync(join(root, 'deploy.js'), "require('node:fs').appendFileSync(process.env.DEPLOY_LOG, `${process.argv[2]} with ${process.env.DEPLOY_TOKEN}\\n`);\n");
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'init']);
   process.chdir(root);
@@ -31,19 +31,19 @@ beforeEach(() => {
 test('a deploy shows its plan first, runs with the owner\'s environment, and shows what changed since', () => {
   const plan = deploy('staging');
   assert.equal(plan.ran, false);
-  assert.match(plan.text, /\$ \.\/deploy\.sh staging\n\nfirst deploy to staging\n\nRun again with --yes/);
+  assert.match(plan.text, /\$ node deploy\.js staging\n\nfirst deploy to staging\n\nRun again with --yes/);
 
   const r = deploy('staging', { yes: true });
   assert.ok(r.ok && r.ran);
   assert.equal(readFileSync(out, 'utf8'), 'staging with the-owners-token\n', 'the runner, not an agent, holds the credentials');
 
-  writeFileSync(join(root, 'deploy.sh'), `#!/bin/sh\necho changed >> "$DEPLOY_LOG"\n`, { mode: 0o755 });
+  writeFileSync(join(root, 'deploy.js'), "require('node:fs').appendFileSync(process.env.DEPLOY_LOG, 'changed\\n');\n");
   writeFileSync(join(root, 'README.md'), 'docs\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'change the deploy']);
   assert.match(deploy('staging').text, /nothing that decides the deploy changed/, 'staging deploys production, which has not moved');
   git(root, ['branch', '-f', 'production', 'main']);
-  assert.match(deploy('staging').text, /read them first:\n {2}- deploy\.sh$/m, 'only files that decide the deploy are listed');
+  assert.match(deploy('staging').text, /read them first:\n {2}- deploy\.js$/m, 'only files that decide the deploy are listed');
 });
 
 test('a deploy runs what was released wherever the owner\'s checkout is, stops at a failing command, and knows its environments', () => {
@@ -53,11 +53,11 @@ test('a deploy runs what was released wherever the owner\'s checkout is, stops a
   assert.match(r.text, /`exit 3` exited 3/);
   assert.match(deploy('broken').text, /first deploy to broken/, 'a failed deploy is not recorded');
   const released = git(root, ['rev-parse', 'production']).trim();
-  writeFileSync(join(root, 'deploy.sh'), `#!/bin/sh\necho unreleased >> "$DEPLOY_LOG"\n`, { mode: 0o755 });
+  writeFileSync(join(root, 'deploy.js'), "require('node:fs').appendFileSync(process.env.DEPLOY_LOG, 'unreleased\\n');\n");
   git(root, ['commit', '-q', '-am', 'not released yet']);
   git(root, ['checkout', '-q', '-b', 'feature']);
   writeFileSync(join(root, 'scratch.txt'), 'the owner\'s own work\n');
   const r2 = deploy('staging', { yes: true });
   assert.equal(r2.commit, released);
-  assert.equal(readFileSync(out, 'utf8'), 'staging with the-owners-token\n', 'production\'s deploy.sh ran, not main\'s');
+  assert.equal(readFileSync(out, 'utf8'), 'staging with the-owners-token\n', 'production\'s deploy.js ran, not main\'s');
 });

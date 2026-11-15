@@ -1,12 +1,12 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { loadBacklog, setStatus, type BacklogItem } from './backlog.js';
 import { modelFor, runtimeFor, validate, vendorSchema } from './config.js';
 import type { Product } from './commands/context.js';
 import { UsageError } from './commands/context.js';
 import type { EngineContext, ItemOutcome } from './engine.js';
 import { commitFiles, currentBranch, isClean } from './git.js';
-import { factoryHome } from './paths.js';
+import { factoryHome, repoPath } from './paths.js';
 import { systemPrompt } from './prompt.js';
 import { appendEvent, readEvents, saveTranscript, type RunEvent } from './runlog.js';
 
@@ -241,7 +241,7 @@ export function decideLesson(product: Product, id: string, decision: 'accept' | 
       const text = existsSync(memory) ? readFileSync(memory, 'utf8') : '';
       appendFileSync(memory, `${text && !text.endsWith('\n') ? '\n' : ''}${/^## Lessons$/m.test(text) ? '' : '\n## Lessons\n\n'}- ${l.title}. ${l.proposal} (${l.id})\n`);
       commitFiles(paths.root, [memory], `docs(memory): ${l.id} ${l.title}\n`);
-      l.applied = relative(paths.root, memory);
+      l.applied = repoPath(paths.root, memory);
     } else {
       const { items } = loadBacklog(paths.backlog);
       const n = Math.max(0, ...items.map((i) => Number(i.id.slice(2)))) + 1;

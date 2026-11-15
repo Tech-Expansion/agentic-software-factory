@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util';
 import { ConfigError } from './config.js';
 import { GitError } from './git.js';
+import { SandboxError } from './sandbox.js';
 import { version } from './version.js';
 import { openProduct, UsageError } from './commands/context.js';
 import { board, formatBoard } from './status.js';
@@ -220,7 +221,7 @@ async function main(argv: string[]): Promise<number> {
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (err: unknown) => {
-    if (err instanceof UsageError || err instanceof ConfigError || err instanceof GitError) {
+    if (err instanceof UsageError || err instanceof ConfigError || err instanceof GitError || err instanceof SandboxError) {
       console.error(`asf: ${err.message}`);
       process.exit(1);
     }

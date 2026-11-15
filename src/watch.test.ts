@@ -10,7 +10,6 @@ import { loadState, saveState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
-process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'asf test';
 process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.invalid';
 

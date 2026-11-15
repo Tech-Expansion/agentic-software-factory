@@ -17,7 +17,7 @@ export interface AgentCall {
   protectedPaths: string[];
   /** With write access, the only paths the agent may edit, for example a tests step. The runner checks it too. */
   writeOnly?: string[];
-  /** Run the agent's commands in the sandbox. Unset only in tests and when the operator turned it off. */
+  /** The sandbox policy. The agent's commands run in the sandbox when it is enabled. */
   sandbox?: SandboxPolicy;
   /** Claude Code hooks, for example a Stop hook that runs the checks before the agent may finish. */
   hooks?: object;

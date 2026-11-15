@@ -4,46 +4,67 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { runChecks } from './checks.js';
-import { loadDefaultPolicy } from './config.js';
+import { loadDefaultPolicy, mergePolicy } from './config.js';
 import { git } from './git.js';
 import { findSecrets, testTampering } from './integrity.js';
 import { claudeArgs, claudeEnv, parseClaudeOutput } from './runtimes/claude.js';
 import { codexEnv } from './runtimes/codex.js';
 import type { AgentCall } from './runtimes/types.js';
-import { claudeSandbox, hasSrt, scrubEnv, srtSettings, toolchainEnv } from './sandbox.js';
+import { claudeSandbox, hasSrt, requireSandbox, sandboxUnavailable, scrubEnv, srtSettings, toolchainEnv } from './sandbox.js';
 
 const policy = loadDefaultPolicy();
+/** The sandbox policy with the sandbox on, and off, whatever the environment of this test run says. */
+const on = { ...policy.sandbox, enabled: true };
+const off = { ...policy.sandbox, enabled: false };
 
 test('secrets are removed from the environment of agent commands and checks', () => {
   const env = scrubEnv({ PATH: '/bin', HOME: '/h', CLAUDE_CODE_OAUTH_TOKEN: 't', MY_DB_PASSWORD: 'p', JIRA_API_TOKEN: 'j', TZ: 'UTC' }, policy.sandbox.secret_env);
   assert.deepEqual(env, { PATH: '/bin', HOME: '/h', TZ: 'UTC' });
 });
 
-test('checks never see the runner secrets, even unsandboxed', () => {
-  const saved = process.env.ASF_UNSAFE_NO_SANDBOX;
-  process.env.ASF_UNSAFE_NO_SANDBOX = '1';
+test('checks never see the runner secrets, even without the sandbox', () => {
   process.env.ASF_PROBE_TOKEN = 'leak';
   try {
-    const [r] = runChecks(tmpdir(), ['test -z "$ASF_PROBE_TOKEN"'], policy.sandbox);
+    const [r] = runChecks(tmpdir(), ['node -e "process.exit(process.env.ASF_PROBE_TOKEN ? 1 : 0)"'], off);
     assert.equal(r?.ok, true, r?.output);
   } finally {
     delete process.env.ASF_PROBE_TOKEN;
-    if (saved === undefined) delete process.env.ASF_UNSAFE_NO_SANDBOX;
-    else process.env.ASF_UNSAFE_NO_SANDBOX = saved;
   }
+});
+
+test('the sandbox is off until a product or the operator turns it on, and a product cannot turn it off again', () => {
+  const saved = process.env.ASF_SANDBOX;
+  try {
+    delete process.env.ASF_SANDBOX;
+    const base = loadDefaultPolicy();
+    assert.equal(base.sandbox.enabled, false);
+    assert.equal(mergePolicy(base, { sandbox: { enabled: true } }).sandbox.enabled, true);
+    process.env.ASF_SANDBOX = '1';
+    assert.equal(mergePolicy(loadDefaultPolicy(), { sandbox: { enabled: false } }).sandbox.enabled, true);
+  } finally {
+    if (saved === undefined) delete process.env.ASF_SANDBOX;
+    else process.env.ASF_SANDBOX = saved;
+  }
+});
+
+test('a sandbox that is on is never quietly left out: native Windows has none, and says how to go on', () => {
+  assert.match(sandboxUnavailable('win32')!, /WSL2[\s\S]*sandbox\.enabled/);
+  assert.equal(sandboxUnavailable('darwin'), undefined);
+  assert.equal(sandboxUnavailable('linux'), undefined);
+  assert.doesNotThrow(() => requireSandbox(off));
 });
 
 test('checks in the sandbox cannot read credentials or reach other hosts', { skip: !hasSrt() && 'srt is not installed' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'asf-sbx-'));
-  const [read] = runChecks(dir, [`ls ${join(homedir(), '.ssh')} || ls ${join(homedir(), '.claude')}`], policy.sandbox);
+  const [read] = runChecks(dir, [`ls ${join(homedir(), '.ssh')} || ls ${join(homedir(), '.claude')}`], on);
   assert.equal(read?.ok, false, 'credentials stay unreadable');
-  const [net] = runChecks(dir, ['curl -s -m 5 -o /dev/null https://example.com'], policy.sandbox);
+  const [net] = runChecks(dir, ['curl -s -m 5 -o /dev/null https://example.com'], on);
   assert.equal(net?.ok, false, 'no network beyond the allowlist');
-  const [write] = runChecks(dir, ['echo ok > out.txt && test -s out.txt'], policy.sandbox);
+  const [write] = runChecks(dir, ['echo ok > out.txt && test -s out.txt'], on);
   assert.equal(write?.ok, true, write?.output);
 });
 
-test('checks and agent commands may write to /tmp under its resolved path too', () => {
+test('checks and agent commands may write to /tmp under its resolved path too', { skip: process.platform === 'win32' && 'Windows has no /tmp' }, () => {
   const real = realpathSync('/tmp');
   for (const settings of [srtSettings(policy.sandbox), claudeSandbox(policy.sandbox)] as { filesystem: { allowWrite: string[] } }[]) {
     assert.ok(settings.filesystem.allowWrite.includes('/tmp'));
@@ -59,7 +80,7 @@ test('checks in the sandbox can reach the npm registry over TLS', { skip: !hasSr
   const saved = process.env.NODE_USE_SYSTEM_CA;
   process.env.NODE_USE_SYSTEM_CA = '1';
   try {
-    const [r] = runChecks(tmpdir(), ['npm view semver version'], policy.sandbox);
+    const [r] = runChecks(tmpdir(), ['npm view semver version'], on);
     assert.equal(r?.ok, true, r?.output);
   } finally {
     if (saved === undefined) delete process.env.NODE_USE_SYSTEM_CA;
@@ -69,7 +90,7 @@ test('checks in the sandbox can reach the npm registry over TLS', { skip: !hasSr
 
 test('checks in the sandbox can write to /tmp', { skip: !hasSrt() && 'srt is not installed' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'asf-sbx-'));
-  const [r] = runChecks(dir, ['f=$(mktemp /tmp/asf-probe.XXXXXX) && rm "$f"'], policy.sandbox);
+  const [r] = runChecks(dir, ['f=$(mktemp /tmp/asf-probe.XXXXXX) && rm "$f"'], on);
   assert.equal(r?.ok, true, r?.output);
 });
 
@@ -81,39 +102,41 @@ const call = (over: Partial<AgentCall> = {}): AgentCall => ({
   allowedCommands: ['npm test'],
   deniedCommands: [],
   protectedPaths: [],
-  sandbox: policy.sandbox,
+  sandbox: on,
   ...over,
 });
 
-test('claude adapter: Bash runs in a sandbox that fails closed, and Read cannot reach what it hides', () => {
-  const saved = process.env.ASF_UNSAFE_NO_SANDBOX;
-  delete process.env.ASF_UNSAFE_NO_SANDBOX;
-  try {
-    const args = claudeArgs(call({ hooks: { Stop: [] } }));
-    const settings = JSON.parse(args[args.indexOf('--settings') + 1]!);
-    assert.equal(settings.sandbox.enabled, true);
-    assert.equal(settings.sandbox.failIfUnavailable, true);
-    assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
-    assert.ok(settings.sandbox.network.allowedDomains.includes('registry.npmjs.org'));
-    assert.ok(settings.sandbox.credentials.envVars.some((v: { name: string }) => v.name === 'CLAUDE_CODE_OAUTH_TOKEN'));
-    assert.deepEqual(settings.hooks, { Stop: [] });
-    assert.equal(settings.sandbox.network.allowLocalBinding, false, 'loopback stays closed unless a product needs it');
-    assert.match(args[args.indexOf('--disallowedTools') + 1]!, /Read\(~\/\.claude\/\*\*\)/);
-    assert.equal(args[args.indexOf('--output-format') + 1], 'stream-json');
-  } finally {
-    if (saved !== undefined) process.env.ASF_UNSAFE_NO_SANDBOX = saved;
-  }
+test('claude adapter: with the sandbox on, Bash runs in one that fails closed, and Read cannot reach what it hides', () => {
+  const args = claudeArgs(call({ hooks: { Stop: [] } }));
+  const settings = JSON.parse(args[args.indexOf('--settings') + 1]!);
+  assert.equal(settings.sandbox.enabled, true);
+  assert.equal(settings.sandbox.failIfUnavailable, true);
+  assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
+  assert.ok(settings.sandbox.network.allowedDomains.includes('registry.npmjs.org'));
+  assert.ok(settings.sandbox.credentials.envVars.some((v: { name: string }) => v.name === 'CLAUDE_CODE_OAUTH_TOKEN'));
+  assert.deepEqual(settings.hooks, { Stop: [] });
+  assert.equal(settings.sandbox.network.allowLocalBinding, false, 'loopback stays closed unless a product needs it');
+  assert.match(args[args.indexOf('--disallowedTools') + 1]!, /Read\(~\/\.claude\/\*\*\)/);
+  assert.equal(args[args.indexOf('--output-format') + 1], 'stream-json');
+  const allowed = args[args.indexOf('--allowedTools') + 1]!.split(',');
+  assert.ok(allowed.includes('Bash(npm test:*)') && !allowed.includes('Bash'), 'the sandbox, not the allow list, lets other commands run');
+});
+
+test('claude adapter: with the sandbox off, a builder runs any command the policy does not deny, and reviewers none', () => {
+  const tools = (c: AgentCall, flag: string) => claudeArgs(c)[claudeArgs(c).indexOf(flag) + 1]!.split(',');
+  const build = call({ sandbox: off, deniedCommands: ['git push', 'curl'] });
+  assert.ok(tools(build, '--allowedTools').includes('Bash'));
+  assert.ok(tools(build, '--disallowedTools').includes('Bash(git push:*)') && tools(build, '--disallowedTools').includes('Bash(curl:*)'));
+  assert.ok(tools(build, '--disallowedTools').includes('Read(~/.ssh/**)'), 'the Read tool stays out of the credentials either way');
+  assert.equal(claudeArgs(build).includes('--settings'), false, 'no sandbox block is sent');
+  const review = tools(call({ sandbox: off, access: 'read' }), '--allowedTools');
+  assert.ok(!review.includes('Bash') && review.includes('Bash(git diff:*)'), 'a read-only step keeps to reading');
 });
 
 test('claude adapter: the toolchain env overrides what the agent inherits, since its settings env does not', () => {
-  const saved = process.env.ASF_UNSAFE_NO_SANDBOX;
-  delete process.env.ASF_UNSAFE_NO_SANDBOX;
-  try {
-    assert.equal(claudeEnv(call(), { NODE_USE_SYSTEM_CA: '1', PATH: '/bin' }).NODE_USE_SYSTEM_CA, '0');
-    assert.equal(claudeEnv(call({ sandbox: undefined }), { NODE_USE_SYSTEM_CA: '1' }).NODE_USE_SYSTEM_CA, '1');
-  } finally {
-    if (saved !== undefined) process.env.ASF_UNSAFE_NO_SANDBOX = saved;
-  }
+  assert.equal(claudeEnv(call(), { NODE_USE_SYSTEM_CA: '1', PATH: '/bin' }).NODE_USE_SYSTEM_CA, '0');
+  assert.equal(claudeEnv(call({ sandbox: off }), { NODE_USE_SYSTEM_CA: '1' }).NODE_USE_SYSTEM_CA, '1');
+  assert.equal(claudeEnv(call({ sandbox: undefined }), { NODE_USE_SYSTEM_CA: '1' }).NODE_USE_SYSTEM_CA, '1');
 });
 
 test('claude adapter: a tests step may edit test files only', () => {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import type { ValidateFunction } from 'ajv';
 import { factoryRoot, type ProductPaths } from './paths.js';
+import { sandboxForced } from './sandbox.js';
 
 const require = createRequire(import.meta.url);
 const Ajv = require('ajv') as typeof import('ajv').default;
@@ -77,6 +78,8 @@ export interface Policy {
 }
 
 export interface SandboxPolicy {
+  /** Off unless the product's policy, or the operator with ASF_SANDBOX=1, turns it on. */
+  enabled: boolean;
   network_allow: string[];
   deny_read: string[];
   write_allow: string[];
@@ -91,11 +94,16 @@ const VENDOR_UNSUPPORTED = new Set(['$schema', '$id', 'title', 'minLength', 'max
 
 /**
  * A schema as sent to a CLI's structured-output mode, which rejects some JSON Schema keywords. The runner still
- * validates the answer against the full schema.
+ * validates the answer against the full schema. The keys of `properties` are the answer's own field names, not
+ * keywords: a field called `title` stays, or the schema would require what it no longer allows.
  */
 export function vendorSchema(name: string): object {
-  const strip = (v: unknown): unknown =>
-    Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => !VENDOR_UNSUPPORTED.has(k)).map(([k, x]) => [k, strip(x)])) : v;
+  const strip = (v: unknown, names = false): unknown =>
+    Array.isArray(v)
+      ? v.map((x) => strip(x))
+      : v && typeof v === 'object'
+        ? Object.fromEntries(Object.entries(v).filter(([k]) => names || !VENDOR_UNSUPPORTED.has(k)).map(([k, x]) => [k, strip(x, !names && k === 'properties')]))
+        : v;
   return strip(loadSchema(name)) as object;
 }
 
@@ -134,7 +142,9 @@ export function loadProject(paths: ProductPaths): ProjectConfig {
 }
 
 export function loadDefaultPolicy(): Policy {
-  return loadValidated<Policy>(join(factoryRoot, 'policies', 'default.yaml'), 'policy');
+  const policy = loadValidated<Policy>(join(factoryRoot, 'policies', 'default.yaml'), 'policy');
+  if (sandboxForced()) policy.sandbox.enabled = true;
+  return policy;
 }
 
 /** A product policy can only tighten the default: limits take the lower value, lists are added to. */
@@ -153,6 +163,8 @@ export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbo
     test_paths: union(base.test_paths, override.test_paths),
     secret_patterns: union(base.secret_patterns, override.secret_patterns),
     sandbox: {
+      // Turning the sandbox on tightens; a product cannot turn off one the operator forced on.
+      enabled: base.sandbox.enabled || (override.sandbox?.enabled ?? false),
       // The one list a product widens: the hosts it needs. Only the owner can edit .factory/policy.yaml.
       network_allow: union(base.sandbox.network_allow, override.sandbox?.network_allow),
       deny_read: union(base.sandbox.deny_read, override.sandbox?.deny_read),
