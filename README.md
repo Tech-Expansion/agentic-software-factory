@@ -1,53 +1,184 @@
-# agentic-software-factory
+# Agentic Software Factory (ASF)
 
-A local-first software team of AI agents. It turns a rough idea into tested, documented software, using your own
-Claude Code or Codex subscription.
+**Describe the app you want. A small team of AI agents builds it, tests it, and asks you only the decisions that are
+yours to make.**
 
-You are its owner, the way a client is to a team they hired: you decide what the product does, what it costs and when
-it ships, and the team makes the technical calls.
+> Status: 0.1, experimental. It works end to end, but it is new: expect rough edges, and keep an eye on what it
+> builds. Not yet on npm.
 
-> Status: 0.1, experimental. Works end to end with Claude Code 2.1 and codex-cli 0.147. Not yet on npm.
+## The idea, in plain words
 
-## The team
+Think of ASF as hiring a small software agency, except the agency is a team of AI agents that works on your own
+computer.
 
-| Role | When |
+- **You are the owner.** You explain what you want, answer questions about it, and decide when it goes live.
+- **The team does the rest.** It plans the work, writes the code, writes tests that prove the code works, reviews
+  itself, and fixes what fails.
+- **It only stops for you when it has to.** A question about what the product should do, something that costs
+  money, something that cannot be undone, or the moment to go live. Technical choices are the team's.
+- **You see it grow.** Every finished piece lands in a test version of the product on its own; the real one changes
+  only when you release.
+
+It uses the AI subscription you already have (Claude, or ChatGPT through Codex). There is no ASF account, no server
+of ours, and your code stays on your machine.
+
+## Who is on the team
+
+| Role | In everyday words |
 | --- | --- |
-| **Product owner** | With you in `asf discover`: scans the market, writes the brief, specs and backlog, and proposes specialists. Unattended: clarifies new items, asks only what it cannot settle, and sizes them |
-| **QA** | Writes acceptance tests from the criteria before the build and locks them; after the build, judges the change against the criteria |
-| **Developer** | Builds the item in its own git worktree until the checks pass |
-| **Tech lead** | Plans a high-risk item; reviews every change as the senior developer who did not write it; decides lessons |
-| **Security reviewer**, **UX designer** | Specialists, off until you turn them on in `specialists:` |
-| **DevOps engineer** | CI, images, infrastructure and deploy scripts (the `infra` workflow); you run the deploy |
-| **Scrum master** | After an item that needed rework: proposes a lesson, as a check rather than a longer prompt |
+| **Product owner** | Talks the idea through with you, looks at what similar products already exist, and turns it all into a plan of small pieces of work. Asks you when something is unclear, in everyday words. |
+| **QA** (quality) | Before anything is built, writes the checks that will prove it works. Afterwards, decides whether it really does what you asked. |
+| **Developer** | Writes the code, one piece at a time. |
+| **Tech lead** | The senior developer: chooses the technology, plans the risky pieces, reviews every change before it is accepted, and works out why a piece keeps failing before anyone asks you. |
+| **Security reviewer**, **UX designer** | Specialists you switch on when the product needs them: security for anything with money, passwords or personal data; UX for anything people click on. The product owner tells you when. |
+| **DevOps engineer** | Sets up how the product is put online: the test version updates itself, the real one when you release. |
+| **Scrum master** | When something went wrong, works out how to stop it happening again. |
+
+## What you do, and what the team does
+
+| You | The team |
+| --- | --- |
+| Explain the idea and who it is for | Researches similar products and proposes what to build first |
+| Answer questions about what the product should do | Turns your answers into a plan with clear "done" conditions |
+| Decide on costs (a paid service) and anything that cannot be undone | Picks the technology, writes the code and the tests |
+| Say when a batch goes live | Reviews and fixes its own work, keeps the test version up to date, and learns from its mistakes |
+
+## How one piece of work goes
 
 ```mermaid
 flowchart LR
-  R[ready item] --> T[QA: acceptance tests, locked]
-  T --> B[developer]
-  B --> C[your checks]
-  C --> V[QA: verdict]
-  V --> L[tech lead: review]
-  L --> S[specialists, if on]
-  S --> M[integration branch, or waits for you]
-  C & V & L & S -->|fail| B
+  I[You: an idea or a request] --> P[Product owner: asks, plans]
+  P --> T[QA: writes the checks first]
+  T --> D[Developer: builds it]
+  D --> C[Automatic checks]
+  C --> Q[QA and tech lead: review]
+  Q -->|not good enough| D
+  D -->|keeps failing| E[Tech lead, then product owner: plan again or split it]
+  E --> D
+  Q -->|good| R[Test version: waits for your release]
+  R --> L[You: release, it goes live]
 ```
 
-A small item skips the tests written first; one that touches a sensitive path is built again with them. What waits
-for you: the product owner's questions, a migration (`owner_paths`), a decision a reviewer escalates (a cost,
-something irreversible, the agreed architecture), the release and the deploy. The team decides the rest, and you can
-reverse a lesson with `asf decide L-n`. See [ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md).
+**An example.** Say you want a website where people can check whether they qualify for a housing programme.
 
-## Why it is built this way
+1. In a conversation, the product owner asks who the users are and what they use today, looks at similar sites, and
+   proposes a first version: an eligibility check and a list of open projects.
+2. It splits that into small pieces, such as "the eligibility questions" or "the list of projects by city", each with
+   conditions that say when it is done.
+3. The team builds the pieces one by one while you do something else. If it needs to know something ("should the
+   check save people's answers?"), it asks, with options and a recommendation.
+4. Each finished piece shows up in the test version. You try it, answer what the team asks, and when you are happy
+   with a batch you release it.
 
-- **Your subscription, your machine.** It drives the official CLIs you are signed in to, as subprocesses, and never
-  touches a credential ([ADR 0001](docs/adr/0001-run-inside-the-users-own-agent-cli.md)).
-- **Spec-driven.** Criteria are numbered; tests and verdicts are named after them.
-- **Tokens are a design metric.** Each step gets only its role, its skills and its item's artifacts; cheap checks run
-  before any model review; every step logs what it used.
-- **Policy is code, not a prompt.** Protected paths are put back, denied commands refused, budgets enforced, and a
-  product can only tighten the defaults. Agents run sandboxed ([ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md)).
+## Before you start
 
-## Install
+You need:
+
+- A Mac or a Linux computer.
+- A **Claude** subscription (Pro or Max) or a **ChatGPT** subscription that includes Codex.
+- About 15 minutes of help from someone technical, once, to install it. They can follow [Install](#install) below.
+
+## Getting started
+
+Open the Terminal app and type the commands below. Each one prints what it did and what to do next.
+
+**1. Create a project** (`my-idea` is any name you like):
+
+```bash
+asf init my-idea
+```
+
+```bash
+cd my-idea
+```
+
+**2. Talk the idea through.** This opens a conversation with the product owner. Answer in your own words; when you
+are not sure, say "decide for me".
+
+```bash
+asf discover
+```
+
+**3. Let the team work.** Leave this window open; it keeps working, and your computer shows a notification when a
+piece of work stops and needs you. Press Ctrl-C to stop it; it picks up where it was next time.
+
+```bash
+asf run --watch
+```
+
+**4. Check in, any time, in a second window.** The board shows what each piece of work is doing and, under
+"Waiting for you", every decision the team needs, with the exact command to give it.
+
+```bash
+asf
+```
+
+**5. Give a decision.** The board tells you which one. For example, to see a question and then answer it:
+
+```bash
+asf show B-0003
+```
+
+```bash
+asf decide B-0003 Q1 "Only Hanoi and Ho Chi Minh City for now"
+```
+
+Or take every recommendation the product owner made: `asf decide B-0003 accept`. When the team could not build a
+piece as asked, it asks you what to do instead; answer with `asf decide B-0003 retry "<your answer>"`. A piece that
+waits for your yes (one that costs money or cannot be undone) is approved with `asf decide B-0003 approve`, or sent
+back with `asf decide B-0003 reject "<why>"`.
+
+**6. Go live** when you are happy with what is on the test version:
+
+```bash
+asf release
+```
+
+On GitHub this opens a release request listing what is in it; you merge it there, and the product goes live. Without
+GitHub, `asf release` puts the batch live at once. If your product is put online by a command instead,
+`asf deploy production` shows what it would do, and `--yes` does it.
+
+## Questions people ask
+
+**Do I need to know how to program?** Not for everyday use: you talk, answer and decide. Someone technical helps
+with the first install, and with setting up where the product goes online.
+
+**How much does it cost?** Nothing beyond your AI subscription. Building uses its allowance; when you hit the
+limit, the team pauses and carries on when the allowance comes back. The board shows how much it used today.
+
+**Is it safe?** The agents work in a locked-down space: they cannot see your passwords or keys, cannot reach the
+internet beyond downloading code libraries, and cannot put anything online themselves. The test version updates on
+its own; only you put a release live, and a change to how the product is put online waits for your yes.
+
+**What if the team gets something wrong?** You see it on the test version before anyone else does. Ask for the
+change like any other request; it goes out with the next release. Every piece has to pass the checks written before
+it was built, a piece that keeps failing goes to the tech lead and the product owner before it comes to you, and a
+mistake that repeats becomes a new automatic check.
+
+**Can I use Jira instead of the terminal?** Yes. The team takes requests from your Jira tickets, posts its questions
+there, and you answer in comments. Someone technical sets it up once.
+
+**What can it not do yet?** It is version 0.1. Some of its judgement calls (how big a piece of work is, when to ask
+you, how good the market research is) are not measured yet, and it does not yet watch the product once it is live.
+
+## Words you will see
+
+| Word | Meaning |
+| --- | --- |
+| **Backlog item** (`B-0003`) | One small piece of work, such as one feature or one fix |
+| **Acceptance criteria** (`AC-001`) | The conditions that say when a piece of work is done |
+| **Checks**, **tests** | Small programs that prove the code does what it should, run automatically |
+| **Branch**, **merge** | A separate copy where work happens; merging puts it into the main version |
+| **main**, **production** | The team's version, which the test version shows, and the live one, which only you change |
+| **Release** | Putting a batch of finished work live: from main into production |
+| **Deploy** | Putting a version of the product online: the test one on its own, the real one when you release |
+| **Lesson** (`L-1`) | A rule the team adds after a mistake, so it does not happen again |
+
+---
+
+## For technical readers
+
+### Install
 
 Node.js 22+, git, Claude Code and/or Codex signed in, and the sandbox runtime
 (`npm install -g @anthropic-ai/sandbox-runtime`; on Linux also `bubblewrap` and `socat`).
@@ -60,31 +191,47 @@ git clone https://github.com/Tech-Expansion/agentic-software-factory.git
 cd agentic-software-factory && npm install && npm run build && npm link
 ```
 
-## Use
+Then, in a new product's `.factory/project.yaml`: set `remote` (for example `origin`) so a release is a pull request
+into production, and `dev_deploy` for a test environment that deploys itself. The tech lead sets `commands.check`
+after `asf discover`. `asf validate` checks the settings.
 
-```bash
-asf init my-idea && cd my-idea
-```
+### How it works
 
-1. In `.factory/project.yaml`, set `integration_branch: integration` so passing items merge on their own and you
-   release in batches.
-2. `asf discover`: plan with the product owner. Items become `ready` only when you agree.
-3. Set `commands.check` (lint, build, test) once the stack is known, then `asf validate`.
-4. `asf run --watch` keeps the team working; `asf` shows the board and every decision waiting for you, with the
-   command that gives it.
+- Each item runs a workflow: QA writes acceptance tests from the criteria and they are locked; the developer builds
+  in its own git worktree; the product's checks run; QA judges the criteria; the tech lead reviews the code;
+  specialists review if turned on. A failure goes back to the developer with the reason, up to a limit; then the
+  tech lead plans it again, once, and after that the product owner splits it or asks the owner.
+- An item that passes merges into main on its own, and dev deploys itself (`dev_deploy`: a push for the hosting or
+  CI, or `deploy.dev` run sandboxed). `asf release` opens a pull request from main into production, or merges
+  locally without a remote ([ADR 0013](docs/adr/0013-main-is-dev-production-is-the-owners.md)).
+- A small item skips the tests written first; one that touches a sensitive path is built again with them.
+- What waits for the owner: the product owner's blocking questions, changes to `owner_paths` (migrations by
+  default) and, while dev deploys itself, to `deploy_paths`; decisions a reviewer escalates, high-risk plans that need
+  the owner, the product owner's question on an item the team could not build, and the release
+  ([ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md)). Questions are in business terms; the
+  tech lead chooses the stack and records it as an ADR.
+- The runner drives the official CLIs as subprocesses and never touches a credential
+  ([ADR 0001](docs/adr/0001-run-inside-the-users-own-agent-cli.md)). Agent commands and checks run sandboxed, with
+  network only to package registries ([ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md)). Policy is
+  code: protected paths are put back, denied commands refused, budgets enforced, and a product can only tighten the
+  defaults.
+- Tokens are a design metric: each step gets only its role, its skills and its item's artifacts, cheap checks run
+  before any model review, and every step logs what it used.
+
+### Commands
 
 | Command | What it does |
 | --- | --- |
 | `asf [--json]`, `asf --date <day>` | The board, or the report of one day |
-| `asf decide <id> …` | `approve`, `reject <reason>`, `retry`, `Q1 <answer>`, `accept`; `accept` or `reject` a lesson `L-n` |
+| `asf decide <id> …` | `approve`, `reject <reason>`, `retry [answer]`, `Q1 <answer>`, `accept`; `accept` or `reject` a lesson `L-n` |
 | `asf show <id>` | An item's open questions, its branch and why it stopped; or a lesson |
-| `asf run [--item id] [--all] [--watch]` | Build now, or keep working unattended (`--workers n`, `--interval s`, `--once`) |
+| `asf run [--item id] [--all] [--watch]` | Build now, or keep working unattended (`--workers n`, 2 by default; `--interval s`, `--once`) |
 | `asf init`, `asf discover`, `asf validate` | Set up and plan a product |
-| `asf release [--dry]`, `asf deploy <env> [--yes]` | Ship: merge the integration branch; run the deploy commands with your credentials |
+| `asf release [--dry]`, `asf deploy <env> [--yes]` | Open the release pull request into production (or merge it locally); run the deploy commands with the owner's credentials: dev from main, other environments from production |
 | `asf clarify`, `asf sync` | One round of what `--watch` does: clarify new items; sync with Jira ([ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md)) |
 | `asf eval` | Measure the factory on its eval cases (factory development) |
 
-## Make it yours
+### Make it yours
 
 A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code and one `.factory/` folder; delete
 `.factory/` and it is an ordinary repository. Without changing the factory
@@ -93,20 +240,22 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code a
 - `.factory/agents/<role>.md` and `.factory/skills/<name>/SKILL.md` add product rules to a role or a skill.
 - `.factory/workflows/<name>.yaml` replaces a workflow or adds one; `workflow:` picks the default, per item or per
   ticket label `asf-<name>`.
-- `specialists:`, `paths:`, `models:`, `runtimes.roles:` and `deploy:` in `project.yaml`; `owner_paths`,
-  `sensitive_paths` and the network allowlist in `.factory/policy.yaml`.
+- `specialists:`, `paths:`, `models:`, `runtimes.roles:`, `production_branch:`, `remote:`, `dev_deploy:` and
+  `deploy:` in `project.yaml`; `owner_paths`, `deploy_paths`, `sensitive_paths` and the network allowlist in
+  `.factory/policy.yaml`.
 
-## Known limits
+### Known limits
 
 - The sandbox is not a container. Codex has no network but can read what its user can; the secret scan before each
   commit is the backstop there.
-- The size call, the tech lead's escalations and the market scan are a model's judgement, not yet measured.
-  Unattended agents have no web access.
 - Codex enforces access through its sandbox only; the denied commands and the checks inside the developer's session
   ([ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)) apply to Claude Code.
+- The size call, the tech lead's escalations and the market scan are a model's judgement, not yet measured.
+  Unattended agents have no web access.
+- Release pull requests need GitHub and its CLI, `gh`, signed in; merge them with a merge commit, not a squash.
 - SRE is designed, not built. Jira is the only tracker, not yet checked against the real `acli`.
 
-## Development
+### Development
 
 `npm test` uses a fake runtime and spends no tokens. `asf eval` builds the cases in `evals/cases/` against hidden
 tests with your CLI (`--trials k` for pass^k); `asf eval --reference` checks the cases with their own solutions, as CI

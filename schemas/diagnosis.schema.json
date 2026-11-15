@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/diagnosis.schema.json",
+  "title": "The tech lead's diagnosis of an item that kept failing",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["diagnosis", "cause"],
+  "properties": {
+    "diagnosis": { "type": "string", "minLength": 1, "description": "Why the attempts failed, in a few sentences: the root cause, not the symptoms." },
+    "cause": {
+      "enum": ["code", "requirement"],
+      "description": "code: the team can build it with a different approach, given in plan. requirement: the item asks for something that cannot be built as written, is too big, or contradicts itself; the product owner takes it from here."
+    },
+    "plan": { "type": "string", "description": "For cause code: the new approach the developer follows, specific enough to hold them to it." }
+  }
+}

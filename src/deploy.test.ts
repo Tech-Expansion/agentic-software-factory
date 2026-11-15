@@ -41,15 +41,23 @@ test('a deploy shows its plan first, runs with the owner\'s environment, and sho
   writeFileSync(join(root, 'README.md'), 'docs\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'change the deploy']);
+  assert.match(deploy('staging').text, /nothing that decides the deploy changed/, 'staging deploys production, which has not moved');
+  git(root, ['branch', '-f', 'production', 'main']);
   assert.match(deploy('staging').text, /read them first:\n {2}- deploy\.sh$/m, 'only files that decide the deploy are listed');
 });
 
-test('a deploy runs only from a clean base branch, stops at a failing command, and knows its environments', () => {
+test('a deploy runs what was released wherever the owner\'s checkout is, stops at a failing command, and knows its environments', () => {
   assert.throws(() => deploy('prod'), /no deploy commands for prod; environments: staging, broken/);
   const r = deploy('broken', { yes: true });
   assert.equal(r.ok, false);
   assert.match(r.text, /`exit 3` exited 3/);
   assert.match(deploy('broken').text, /first deploy to broken/, 'a failed deploy is not recorded');
+  const released = git(root, ['rev-parse', 'production']).trim();
+  writeFileSync(join(root, 'deploy.sh'), `#!/bin/sh\necho unreleased >> "$DEPLOY_LOG"\n`, { mode: 0o755 });
+  git(root, ['commit', '-q', '-am', 'not released yet']);
   git(root, ['checkout', '-q', '-b', 'feature']);
-  assert.throws(() => deploy('staging'), /check out main with a clean tree first/);
+  writeFileSync(join(root, 'scratch.txt'), 'the owner\'s own work\n');
+  const r2 = deploy('staging', { yes: true });
+  assert.equal(r2.commit, released);
+  assert.equal(readFileSync(out, 'utf8'), 'staging with the-owners-token\n', 'production\'s deploy.sh ran, not main\'s');
 });

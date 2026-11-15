@@ -1,6 +1,6 @@
 # 0011. DevOps builds the pipeline; the owner deploys
 
-Status: accepted
+Status: accepted; amended by ADR 0013 (the dev environment deploys itself; the owner releases production)
 Date: 2026-11-14
 Deciders: project owner
 

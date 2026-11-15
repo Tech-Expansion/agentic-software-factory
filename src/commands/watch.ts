@@ -11,6 +11,7 @@ import { clearHeartbeat, writeHeartbeat } from '../status.js';
 import type { Tracker } from '../tracker/types.js';
 import { clarify } from './clarify.js';
 import { openProduct, runtimes, UsageError } from './context.js';
+import { markReleased } from './review.js';
 import { learn, settle } from './run.js';
 import { sync } from './sync.js';
 
@@ -44,7 +45,7 @@ export async function watch(opts: WatchOptions = {}): Promise<{ rounds: number; 
   if (!isRepo(paths.root)) throw new UsageError(`${paths.root} is not a git repository`);
   const base = project.base_branch ?? 'main';
   if (currentBranch(paths.root) !== base) throw new UsageError(`check out ${base} first; items branch from it`);
-  const workers = Math.max(1, opts.workers ?? 1);
+  const workers = Math.max(1, opts.workers ?? 2);
   const interval = (opts.intervalSeconds ?? 60) * 1000;
   const sleep = opts.sleep ?? realSleep;
   const now = opts.now ?? Date.now;
@@ -106,6 +107,11 @@ export async function watch(opts: WatchOptions = {}): Promise<{ rounds: number; 
       } catch (err) {
         log(`intake: ${(err as Error).message}`);
       }
+      try {
+        for (const id of markReleased(paths.root)) log(`${id} is released`);
+      } catch (err) {
+        log(`release: ${(err as Error).message}`);
+      }
 
       const { items, errors } = loadBacklog(paths.backlog);
       if (errors.length) log(`backlog errors, nothing new is started:\n  ${errors.join('\n  ')}`);
@@ -151,9 +157,10 @@ function recover(paths: ReturnType<typeof openProduct>['paths'], log: (msg: stri
     changed = true;
   }
   if (changed) saveState(paths.state, state);
-  const wt = join(paths.worktrees, '_integration');
-  if (existsSync(wt) && git(wt, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], true).trim()) {
-    git(wt, ['merge', '--abort'], true);
-    log('undid a merge into the integration branch that was cut off');
+  for (const [id, st] of Object.entries(state.items)) {
+    if (!existsSync(st.worktree) || !git(st.worktree, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], true).trim()) continue;
+    git(st.worktree, ['merge', '--abort'], true);
+    git(st.worktree, ['checkout', '-q', st.branch], true);
+    log(`undid a merge of ${id} that was cut off`);
   }
 }

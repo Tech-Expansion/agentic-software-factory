@@ -40,6 +40,22 @@ approval_paths:
 # the owner's own approval on anything else (for example "**/package.json").
 owner_paths:
   - "**/migrations/**"
+# What runs with credentials when dev deploys itself after each merge (dev_deploy in project.yaml): CI, deploy
+# scripts, infrastructure. While dev_deploy is on, a change here waits for the owner, since it would run at once.
+deploy_paths:
+  - ".github/**"
+  - "**/.gitlab-ci.yml"
+  - "**/deploy*"
+  - "**/deploy/**"
+  - "**/infra/**"
+  - "**/*.tf"
+  - "**/k8s/**"
+  - "**/helm/**"
+  - "**/Dockerfile"
+  - "**/docker-compose*"
+  - "**/compose.y*ml"
+  - "**/vercel.json"
+  - "**/netlify.toml"
 # Unattended runs may not change these. Planning them is done with the user, in `asf discover`.
 protected_paths:
   - ".factory/**"

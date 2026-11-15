@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/rescope.schema.json",
+  "title": "The product owner's decision on an item the team could not build as written",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "reason"],
+  "properties": {
+    "decision": {
+      "enum": ["split", "ask"],
+      "description": "split: the same scope in smaller items the team builds one by one. ask: a decision about what the product does, which is the owner's."
+    },
+    "reason": { "type": "string", "minLength": 1, "description": "One or two sentences on why." },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "body"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "body": { "type": "string", "minLength": 1, "description": "What to build and its acceptance criteria, as - AC-001: ... lines." }
+        }
+      },
+      "description": "For split: the smaller items, in the order to build them. Together they cover the whole item."
+    },
+    "question": { "type": "string", "description": "For ask: the question, in the owner's words, about what the product does." },
+    "options": { "type": "array", "items": { "type": "string" }, "description": "For ask: two to four options." },
+    "recommended": { "type": "string", "description": "For ask: the option you recommend, and why in one line." }
+  }
+}

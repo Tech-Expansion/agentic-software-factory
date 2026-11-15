@@ -14,11 +14,12 @@ export const sandboxOff = () => process.env.ASF_UNSAFE_NO_SANDBOX === '1';
 
 const SECRET_NAME = /TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|PRIVATE_?KEY|CREDENTIAL|SESSION_?KEY/i;
 
-/** The environment for agent commands and checks: no secrets, whatever the sandbox does. */
-export function scrubEnv(env: NodeJS.ProcessEnv, secretNames: string[]): NodeJS.ProcessEnv {
+/** The environment for agent commands and checks: no secrets, whatever the sandbox does, but the ones in `allow`. */
+export function scrubEnv(env: NodeJS.ProcessEnv, secretNames: string[], allow: string[] = []): NodeJS.ProcessEnv {
   const deny = new Set(secretNames);
+  const keep = new Set(allow);
   const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(env)) if (!deny.has(k) && !SECRET_NAME.test(k)) out[k] = v;
+  for (const [k, v] of Object.entries(env)) if (keep.has(k) || (!deny.has(k) && !SECRET_NAME.test(k))) out[k] = v;
   return out;
 }
 

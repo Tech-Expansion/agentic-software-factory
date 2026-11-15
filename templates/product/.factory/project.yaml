@@ -11,7 +11,18 @@ hypothesis: ""
 success_metric: ""
 kill_criteria: ""
 
+# main is the development line: what passes merges there on its own.
+# production is what is live: it moves only when you release.
 base_branch: main
+production_branch: production
+# remote: origin   # with a remote, `asf release` opens a pull request to production for you to merge
+
+# The dev environment deploys itself after every merge into main; production waits for your release.
+# dev_deploy:
+#   run: push                    # push main to the remote; your hosting or CI deploys it (preferred)
+#   # run: commands              # or the runner runs deploy.dev below, sandboxed:
+#   # env: [DEV_DEPLOY_TOKEN]    #   the only secrets it may see
+#   # network: [api.example.com] #   the only hosts it may reach, besides package registries
 
 runtimes:
   default: claude-code
@@ -35,9 +46,12 @@ runtimes:
 # paths:
 #   ui: ["src/ui/**"]
 
-# Commands per environment for `asf deploy <env>`. Only you run them, with your own credentials; agents never do.
+# Commands per environment for `asf deploy <env>`: dev deploys main, every other environment deploys production.
+# You run them, with your own credentials; with dev_deploy run: commands, the runner runs deploy.dev after each
+# merge, sandboxed. Agents never do.
 # deploy:
-#   staging: ["./deploy.sh staging"]
+#   dev: ["./deploy.sh dev"]
+#   production: ["./deploy.sh production"]
 
 commands:
   # Run once in each new worktree, for example: npm ci

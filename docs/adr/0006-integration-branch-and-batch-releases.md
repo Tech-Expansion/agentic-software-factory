@@ -1,6 +1,6 @@
 # 0006. An integration branch, batch releases, and plans for high-risk items
 
-Status: accepted; amended by ADR 0012 (the tech lead approves plans that need nothing from the client, and changes to approval and sensitive paths)
+Status: accepted; amended by ADR 0012 (the tech lead approves plans that need nothing from the client, and changes to approval and sensitive paths); superseded in part by ADR 0013 (main is the development line, production replaces the integration branch)
 Date: 2026-11-07
 Deciders: project owner
 

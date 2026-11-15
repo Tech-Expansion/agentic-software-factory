@@ -26,7 +26,9 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
     if (project.factory_version !== version) {
       warnings.push(`project.yaml pins factory ${project.factory_version}, this is ${version}`);
     }
-    if (!project.commands.check.length) warnings.push('commands.check is empty: nothing but a model checks the work');
+    if (!project.commands.check.length) warnings.push('commands.check is empty: nothing but a model checks the work; the tech lead sets it after `asf discover`, once the brief says enough');
+    if (project.dev_deploy?.run === 'push' && !project.remote) errors.push('project.yaml dev_deploy: push needs a remote to push to');
+    if (project.dev_deploy?.run === 'commands' && !project.deploy?.dev?.length) errors.push('project.yaml dev_deploy: commands needs deploy.dev commands');
     for (const role of project.specialists ?? []) {
       try {
         loadRole(role, paths.factory);

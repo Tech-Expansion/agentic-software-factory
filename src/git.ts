@@ -71,3 +71,22 @@ export function commitAll(cwd: string, message: string): boolean {
   git(cwd, ['commit', '-q', '-F', '-'], false, message);
   return true;
 }
+
+/** The worktree that has `branch` checked out, if any. */
+export function worktreeOf(root: string, branch: string): string | undefined {
+  for (const block of git(root, ['worktree', 'list', '--porcelain']).split('\n\n')) {
+    const path = /^worktree (.+)$/m.exec(block)?.[1];
+    if (path && new RegExp(`^branch refs/heads/${branch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm').test(block)) return path;
+  }
+  return undefined;
+}
+
+/**
+ * Moves `branch` forward to `commit`, which must contain it. Where the branch is checked out, as a fast-forward merge
+ * there, which keeps the owner's uncommitted changes and refuses only when they touch the same files.
+ */
+export function fastForward(root: string, branch: string, commit: string): void {
+  const wt = worktreeOf(root, branch);
+  if (wt) git(wt, ['merge', '--ff-only', '-q', commit]);
+  else git(root, ['update-ref', `refs/heads/${branch}`, commit, git(root, ['rev-parse', `refs/heads/${branch}`]).trim()]);
+}

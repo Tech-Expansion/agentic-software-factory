@@ -13,11 +13,11 @@ export interface CheckResult {
 /**
  * Runs the product's own commands in order and stops at the first failure. No model is involved, but the commands
  * run code the agents wrote, so they get no secrets in their environment and, with a sandbox policy, run in the
- * sandbox.
+ * sandbox. `allowEnv` names the only secrets they may see, for a dev deploy.
  */
-export function runChecks(cwd: string, commands: string[], sandbox?: SandboxPolicy, timeoutMs = 15 * 60_000): CheckResult[] {
+export function runChecks(cwd: string, commands: string[], sandbox?: SandboxPolicy, timeoutMs = 15 * 60_000, allowEnv: string[] = []): CheckResult[] {
   const results: CheckResult[] = [];
-  const env = { ...scrubEnv(process.env, sandbox?.secret_env ?? []), ...(sandbox && !sandboxOff() ? toolchainEnv(sandbox) : {}) };
+  const env = { ...scrubEnv(process.env, sandbox?.secret_env ?? [], allowEnv), ...(sandbox && !sandboxOff() ? toolchainEnv(sandbox) : {}) };
   for (const command of commands) {
     const started = Date.now();
     const { cmd, args, shell } = sandboxed(command, sandbox);
