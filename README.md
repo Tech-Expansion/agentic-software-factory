@@ -49,7 +49,7 @@ asf init my-idea
 cd my-idea
 ```
 
-**2. Talk the idea through.** This opens a conversation with the product owner. Answer in your own words; when you
+**2. Talk the idea through.** This opens a conversation with the product owner agent who researches market automatically. Answer in your own words; when you
 are not sure, say "decide for me".
 
 ```bash
