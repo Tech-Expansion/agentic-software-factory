@@ -45,7 +45,7 @@ export async function watch(opts: WatchOptions = {}): Promise<{ rounds: number; 
   if (!isRepo(paths.root)) throw new UsageError(`${paths.root} is not a git repository`);
   const base = project.base_branch ?? 'main';
   if (currentBranch(paths.root) !== base) throw new UsageError(`check out ${base} first; items branch from it`);
-  const workers = Math.max(1, opts.workers ?? 1);
+  const workers = Math.max(1, opts.workers ?? 2);
   const interval = (opts.intervalSeconds ?? 60) * 1000;
   const sleep = opts.sleep ?? realSleep;
   const now = opts.now ?? Date.now;

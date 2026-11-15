@@ -15,7 +15,9 @@ computer.
 - **The team does the rest.** It plans the work, writes the code, writes tests that prove the code works, reviews
   itself, and fixes what fails.
 - **It only stops for you when it has to.** A question about what the product should do, something that costs
-  money, something that cannot be undone, or the moment to release. Technical choices are the team's.
+  money, something that cannot be undone, or the moment to go live. Technical choices are the team's.
+- **You see it grow.** Every finished piece lands in a test version of the product on its own; the real one changes
+  only when you release.
 
 It uses the AI subscription you already have (Claude, or ChatGPT through Codex). There is no ASF account, no server
 of ours, and your code stays on your machine.
@@ -24,12 +26,12 @@ of ours, and your code stays on your machine.
 
 | Role | In everyday words |
 | --- | --- |
-| **Product owner** | Talks the idea through with you, looks at what similar products already exist, and turns it all into a plan of small pieces of work. Asks you when something is unclear. |
+| **Product owner** | Talks the idea through with you, looks at what similar products already exist, and turns it all into a plan of small pieces of work. Asks you when something is unclear, in everyday words. |
 | **QA** (quality) | Before anything is built, writes the checks that will prove it works. Afterwards, decides whether it really does what you asked. |
 | **Developer** | Writes the code, one piece at a time. |
-| **Tech lead** | The senior developer: plans the risky pieces and reviews every change before it is accepted. |
+| **Tech lead** | The senior developer: chooses the technology, plans the risky pieces, reviews every change before it is accepted, and works out why a piece keeps failing before anyone asks you. |
 | **Security reviewer**, **UX designer** | Specialists you switch on when the product needs them: security for anything with money, passwords or personal data; UX for anything people click on. The product owner tells you when. |
-| **DevOps engineer** | Sets up how the product is put online. You press the button. |
+| **DevOps engineer** | Sets up how the product is put online: the test version updates itself, the real one when you release. |
 | **Scrum master** | When something went wrong, works out how to stop it happening again. |
 
 ## What you do, and what the team does
@@ -39,7 +41,7 @@ of ours, and your code stays on your machine.
 | Explain the idea and who it is for | Researches similar products and proposes what to build first |
 | Answer questions about what the product should do | Turns your answers into a plan with clear "done" conditions |
 | Decide on costs (a paid service) and anything that cannot be undone | Picks the technology, writes the code and the tests |
-| Say yes to a release and to putting it online | Reviews and fixes its own work, and learns from its mistakes |
+| Say when a batch goes live | Reviews and fixes its own work, keeps the test version up to date, and learns from its mistakes |
 
 ## How one piece of work goes
 
@@ -51,7 +53,10 @@ flowchart LR
   D --> C[Automatic checks]
   C --> Q[QA and tech lead: review]
   Q -->|not good enough| D
-  Q -->|good| R[Ready for your release]
+  D -->|keeps failing| E[Tech lead, then product owner: plan again or split it]
+  E --> D
+  Q -->|good| R[Test version: waits for your release]
+  R --> L[You: release, it goes live]
 ```
 
 **An example.** Say you want a website where people can check whether they qualify for a housing programme.
@@ -62,7 +67,8 @@ flowchart LR
    conditions that say when it is done.
 3. The team builds the pieces one by one while you do something else. If it needs to know something ("should the
    check save people's answers?"), it asks, with options and a recommendation.
-4. You look at the board, answer, and when a batch is ready you release it.
+4. Each finished piece shows up in the test version. You try it, answer what the team asks, and when you are happy
+   with a batch you release it.
 
 ## Before you start
 
@@ -117,20 +123,20 @@ asf show B-0003
 asf decide B-0003 Q1 "Only Hanoi and Ho Chi Minh City for now"
 ```
 
-Or take every recommendation the product owner made: `asf decide B-0003 accept`. To send a piece of work back with a
-reason: `asf decide B-0003 reject "the button text should be in Vietnamese"`.
+Or take every recommendation the product owner made: `asf decide B-0003 accept`. When the team could not build a
+piece as asked, it asks you what to do instead; answer with `asf decide B-0003 retry "<your answer>"`. A piece that
+waits for your yes (one that costs money or cannot be undone) is approved with `asf decide B-0003 approve`, or sent
+back with `asf decide B-0003 reject "<why>"`.
 
-**6. Release and go live** when the board says a batch is ready:
+**6. Go live** when you are happy with what is on the test version:
 
 ```bash
 asf release
 ```
 
-```bash
-asf deploy production
-```
-
-`asf deploy` first only shows what it would do. Add `--yes` to really do it.
+On GitHub this opens a release request listing what is in it; you merge it there, and the product goes live. Without
+GitHub, `asf release` puts the batch live at once. If your product is put online by a command instead,
+`asf deploy production` shows what it would do, and `--yes` does it.
 
 ## Questions people ask
 
@@ -141,11 +147,13 @@ with the first install, and with setting up where the product goes online.
 limit, the team pauses and carries on when the allowance comes back. The board shows how much it used today.
 
 **Is it safe?** The agents work in a locked-down space: they cannot see your passwords or keys, cannot reach the
-internet beyond downloading code libraries, and cannot put anything online. Only you release and deploy.
+internet beyond downloading code libraries, and cannot put anything online themselves. The test version updates on
+its own; only you put a release live, and a change to how the product is put online waits for your yes.
 
-**What if the team gets something wrong?** Send it back with `asf decide <id> reject "<what is wrong>"`; the reason
-becomes the team's instructions. Every piece has to pass the checks written before it was built, and a mistake that
-repeats becomes a new automatic check.
+**What if the team gets something wrong?** You see it on the test version before anyone else does. Ask for the
+change like any other request; it goes out with the next release. Every piece has to pass the checks written before
+it was built, a piece that keeps failing goes to the tech lead and the product owner before it comes to you, and a
+mistake that repeats becomes a new automatic check.
 
 **Can I use Jira instead of the terminal?** Yes. The team takes requests from your Jira tickets, posts its questions
 there, and you answer in comments. Someone technical sets it up once.
@@ -161,8 +169,9 @@ you, how good the market research is) are not measured yet, and it does not yet 
 | **Acceptance criteria** (`AC-001`) | The conditions that say when a piece of work is done |
 | **Checks**, **tests** | Small programs that prove the code does what it should, run automatically |
 | **Branch**, **merge** | A separate copy where work happens; merging puts it into the main version |
-| **Release** | Accepting a batch of finished work into the main version of the product |
-| **Deploy** | Putting the product online for real users |
+| **main**, **production** | The team's version, which the test version shows, and the live one, which only you change |
+| **Release** | Putting a batch of finished work live: from main into production |
+| **Deploy** | Putting a version of the product online: the test one on its own, the real one when you release |
 | **Lesson** (`L-1`) | A rule the team adds after a mistake, so it does not happen again |
 
 ---
@@ -182,19 +191,25 @@ git clone https://github.com/Tech-Expansion/agentic-software-factory.git
 cd agentic-software-factory && npm install && npm run build && npm link
 ```
 
-Then, in a new product's `.factory/project.yaml`: set `integration_branch: integration`, so items that pass merge on
-their own and the owner releases them in batches, and set `commands.check` (lint, build, test) once the stack is
-known; `asf validate` checks the settings.
+Then, in a new product's `.factory/project.yaml`: set `remote` (for example `origin`) so a release is a pull request
+into production, and `dev_deploy` for a test environment that deploys itself. The tech lead sets `commands.check`
+after `asf discover`. `asf validate` checks the settings.
 
 ### How it works
 
 - Each item runs a workflow: QA writes acceptance tests from the criteria and they are locked; the developer builds
   in its own git worktree; the product's checks run; QA judges the criteria; the tech lead reviews the code;
-  specialists review if turned on. A failure goes back to the developer with the reason, up to a limit.
+  specialists review if turned on. A failure goes back to the developer with the reason, up to a limit; then the
+  tech lead plans it again, once, and after that the product owner splits it or asks the owner.
+- An item that passes merges into main on its own, and dev deploys itself (`dev_deploy`: a push for the hosting or
+  CI, or `deploy.dev` run sandboxed). `asf release` opens a pull request from main into production, or merges
+  locally without a remote ([ADR 0013](docs/adr/0013-main-is-dev-production-is-the-owners.md)).
 - A small item skips the tests written first; one that touches a sensitive path is built again with them.
 - What waits for the owner: the product owner's blocking questions, changes to `owner_paths` (migrations by
-  default), decisions a reviewer escalates, high-risk plans that need the owner, releases and deploys
-  ([ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md)).
+  default) and, while dev deploys itself, to `deploy_paths`; decisions a reviewer escalates, high-risk plans that need
+  the owner, the product owner's question on an item the team could not build, and the release
+  ([ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md)). Questions are in business terms; the
+  tech lead chooses the stack and records it as an ADR.
 - The runner drives the official CLIs as subprocesses and never touches a credential
   ([ADR 0001](docs/adr/0001-run-inside-the-users-own-agent-cli.md)). Agent commands and checks run sandboxed, with
   network only to package registries ([ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md)). Policy is
@@ -208,11 +223,11 @@ known; `asf validate` checks the settings.
 | Command | What it does |
 | --- | --- |
 | `asf [--json]`, `asf --date <day>` | The board, or the report of one day |
-| `asf decide <id> …` | `approve`, `reject <reason>`, `retry`, `Q1 <answer>`, `accept`; `accept` or `reject` a lesson `L-n` |
+| `asf decide <id> …` | `approve`, `reject <reason>`, `retry [answer]`, `Q1 <answer>`, `accept`; `accept` or `reject` a lesson `L-n` |
 | `asf show <id>` | An item's open questions, its branch and why it stopped; or a lesson |
-| `asf run [--item id] [--all] [--watch]` | Build now, or keep working unattended (`--workers n`, `--interval s`, `--once`) |
+| `asf run [--item id] [--all] [--watch]` | Build now, or keep working unattended (`--workers n`, 2 by default; `--interval s`, `--once`) |
 | `asf init`, `asf discover`, `asf validate` | Set up and plan a product |
-| `asf release [--dry]`, `asf deploy <env> [--yes]` | Merge the integration branch; run the deploy commands with the owner's credentials |
+| `asf release [--dry]`, `asf deploy <env> [--yes]` | Open the release pull request into production (or merge it locally); run the deploy commands with the owner's credentials: dev from main, other environments from production |
 | `asf clarify`, `asf sync` | One round of what `--watch` does: clarify new items; sync with Jira ([ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md)) |
 | `asf eval` | Measure the factory on its eval cases (factory development) |
 
@@ -225,8 +240,9 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code a
 - `.factory/agents/<role>.md` and `.factory/skills/<name>/SKILL.md` add product rules to a role or a skill.
 - `.factory/workflows/<name>.yaml` replaces a workflow or adds one; `workflow:` picks the default, per item or per
   ticket label `asf-<name>`.
-- `specialists:`, `paths:`, `models:`, `runtimes.roles:` and `deploy:` in `project.yaml`; `owner_paths`,
-  `sensitive_paths` and the network allowlist in `.factory/policy.yaml`.
+- `specialists:`, `paths:`, `models:`, `runtimes.roles:`, `production_branch:`, `remote:`, `dev_deploy:` and
+  `deploy:` in `project.yaml`; `owner_paths`, `deploy_paths`, `sensitive_paths` and the network allowlist in
+  `.factory/policy.yaml`.
 
 ### Known limits
 
@@ -236,6 +252,7 @@ A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code a
   ([ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)) apply to Claude Code.
 - The size call, the tech lead's escalations and the market scan are a model's judgement, not yet measured.
   Unattended agents have no web access.
+- Release pull requests need GitHub and its CLI, `gh`, signed in; merge them with a merge commit, not a squash.
 - SRE is designed, not built. Jira is the only tracker, not yet checked against the real `acli`.
 
 ### Development

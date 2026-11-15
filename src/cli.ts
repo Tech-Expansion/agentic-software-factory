@@ -37,7 +37,7 @@ Every day:
   asf run [--item <id>] [--all]     build the next ready item now (or one, or all)
   asf run --watch [--workers <n>] [--interval <s>] [--once]
                                     keep working unattended: intake, questions, builds, n at a
-                                    time; Ctrl-C stops after the items in progress
+                                    time (2 by default); Ctrl-C stops after the items in progress
 
 Setting up:
   asf init [dir] [--name <name>]    create a product skeleton and register it
@@ -132,7 +132,7 @@ async function main(argv: string[]): Promise<number> {
       const r = init(args[0] ?? '.', values.name);
       for (const f of r.created) console.log(`created ${f}`);
       for (const f of r.skipped) console.log(`kept    ${f}`);
-      console.log('\nNext: fill in .factory/project.yaml (commands.check above all), then run `asf discover`.');
+      console.log('\nNext: run `asf discover` to talk the idea through; the tech lead chooses the stack and its checks after it.');
       return 0;
     }
     case 'discover':
