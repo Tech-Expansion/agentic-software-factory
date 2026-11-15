@@ -83,7 +83,7 @@ test('items that pass merge into main on their own; the owner releases them to p
   assert.deepEqual(release().items, [], 'nothing left to release');
 });
 
-test('with a remote, the release is a pull request the owner merges, and the items are done once it is', async () => {
+test('with a remote, the release is a pull request the owner merges, and the items are done once it is', { skip: process.platform === 'win32' && 'the fake gh is a shell script; Windows starts only .exe files without a shell' }, async () => {
   const remote = mkdtempSync(join(tmpdir(), 'asf-remote-'));
   git(remote, ['init', '-q', '--bare']);
   git(root, ['remote', 'add', 'origin', remote]);

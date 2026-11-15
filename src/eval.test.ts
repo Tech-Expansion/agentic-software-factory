@@ -98,7 +98,7 @@ test('eval: trials give pass^k and pass@k per suite, and transcripts are kept', 
   assert.deepEqual(r.summary.suites.regression && { all: r.summary.suites.regression.passAll, any: r.summary.suites.regression.passAny }, { all: 1, any: 2 });
   assert.deepEqual(r.cases.map((c) => `${c.id}#${c.trial}:${c.delivered}`), ['flaky#1:true', 'flaky#2:false', 'flaky#3:false', 'steady#1:true', 'steady#2:true', 'steady#3:true']);
   const t = r.cases[0]!.transcripts!;
-  assert.match(t, /r-transcripts\/flaky-t1$/);
+  assert.match(t, /r-transcripts[\\/]flaky-t1$/);
   assert.equal(readFileSync(join(t, 'B-0001', 'a1-build.jsonl'), 'utf8'), '{"type":"result"}\n');
   assert.ok(existsSync(join(t, 'B-0001', 'a1-tests.jsonl')));
 });
