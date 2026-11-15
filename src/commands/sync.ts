@@ -205,15 +205,17 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
     // 3. Where the work is, and the owner's decisions on it.
     const st = state.items[item.id];
     const now =
-      item.status === 'done'
-        ? 'done'
-        : st?.state === 'review' || st?.state === 'blocked' || st?.state === 'merged'
-          ? st.state
-          : st?.state === 'plan-review'
-            ? 'plan'
-            : st
-              ? 'in_progress'
-              : undefined;
+      st?.state === 'merged'
+        ? 'merged'
+        : item.status === 'done'
+          ? 'done'
+          : st?.state === 'review' || st?.state === 'blocked'
+            ? st.state
+            : st?.state === 'plan-review'
+              ? 'plan'
+              : st
+                ? 'in_progress'
+                : undefined;
     if (now && now !== link.shown) {
       await fresh(link);
       if (now === 'review') {
@@ -224,9 +226,9 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
       } else if (now === 'plan') {
         await tracker.comment(link.key, `${MARK} ${item.id} is high risk, and the tech lead's plan needs your decision; nothing is built until you approve it.\n\n${st!.plan?.text ?? ''}\n\nReply "/approve" to build it this way, or "/reject <reason>" for a new plan.`);
       } else if (now === 'merged') {
-        await tracker.comment(link.key, `${MARK} ${item.id} passed its checks and review and is merged into ${project.integration_branch}. It reaches ${base} with the next \`asf release\`.`);
+        await tracker.comment(link.key, `${MARK} ${item.id} passed its checks and review and is merged into ${base}, the development line. It goes live with the next release.`);
       } else if (now === 'done') {
-        await tracker.comment(link.key, `${MARK} ${item.id} is in ${base}.`);
+        await tracker.comment(link.key, `${MARK} ${item.id} is released to ${project.production_branch ?? 'production'}.`);
       }
       if (now !== 'merged') await move(link.key, now === 'plan' ? 'review' : now);
       link.shown = now;
@@ -245,12 +247,8 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
             await move(link.key, 'in_progress');
             link.shown = 'in_progress';
           } else if (d.kind === 'approve' && now === 'review') {
-            const r = approve(item.id, paths.root);
-            if (r.into === base) {
-              await tracker.comment(link.key, `${MARK} ${item.id} is in ${base}.`);
-              await move(link.key, 'done');
-              link.shown = 'done';
-            }
+            // Merged into the base branch: the next look tells the ticket, and it is done once released.
+            approve(item.id, paths.root);
           } else if (d.kind === 'reject' && (now === 'review' || now === 'plan')) {
             reject(item.id, d.reason ?? '', paths.root);
             await move(link.key, 'in_progress');

@@ -37,7 +37,19 @@
     },
     "base_branch": {
       "type": "string",
-      "default": "main"
+      "default": "main",
+      "description": "The development line. Items that pass checks and review merge into it on their own; items that touch owner_paths, or that the tech lead escalates, wait for the owner one by one."
+    },
+    "production_branch": {
+      "type": "string",
+      "minLength": 1,
+      "default": "production",
+      "description": "What is live. Only the owner's release brings base_branch into it: `asf release` opens a pull request from base_branch when there is a remote, and merges locally when there is not."
+    },
+    "remote": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The git remote, for example origin, that base_branch is pushed to and the release pull request is opened on (with gh)."
     },
     "runtimes": {
       "type": "object",
@@ -205,11 +217,6 @@
           }
         }
       }
-    },
-    "integration_branch": {
-      "type": "string",
-      "minLength": 1,
-      "description": "When set, items branch from it and those that pass checks and review merge into it on their own; the owner releases it into base_branch in batches with `asf release`. Items that touch owner_paths, or that the tech lead escalates, still wait for the owner one by one."
     }
   },
   "definitions": {

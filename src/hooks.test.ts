@@ -82,7 +82,7 @@ test('a failing check is fixed inside the build session, without another attempt
   process.chdir(root);
   const rt = claudeWithHooks();
   const [out] = await run({ context: { runtime: () => rt } });
-  assert.equal(out?.state, 'review');
+  assert.equal(out?.state, 'merged');
   assert.equal(rt.reasons.length, 1);
   assert.match(rt.reasons[0]!, /the checks failed \(round 1 of 3\)/);
   assert.equal(rt.calls.filter((c) => c.access === 'write' && !c.writeOnly).length, 1, 'one build call');

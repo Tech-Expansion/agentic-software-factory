@@ -63,7 +63,8 @@ beforeEach(() => {
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
   writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', 'check: ["test -f hello.txt"]').replace('notifications: desktop', 'notifications: none'));
-  writeFileSync(join(root, '.factory/policy.yaml'), 'max_attempts: 2\n');
+  // hello.txt is the owner's to decide, so a built item waits in review instead of merging on its own.
+  writeFileSync(join(root, '.factory/policy.yaml'), 'max_attempts: 2\nowner_paths: ["hello.txt"]\n');
   writeFileSync(join(root, 'specs/hello.md'), '# Hello\n\n## Acceptance criteria\n- AC-001: hello.txt exists.\n');
   writeFileSync(join(root, 'backlog/0001-hello.md'), '---\nid: B-0001\ntitle: Say hello\nstatus: ready\npriority: 1\nspec: specs/hello.md\ncriteria: [AC-001]\n---\nCreate hello.txt.\n');
   git(root, ['add', '-A']);

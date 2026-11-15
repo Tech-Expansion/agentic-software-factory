@@ -14,7 +14,7 @@ export function report(date: string = day(new Date().toISOString()), root?: stri
   const title = (id: string) => items.find((i) => i.id === id)?.title ?? '';
   const out: string[] = [`# ${project.name}: report for ${date}`, ''];
 
-  const done = events.filter((e) => e.step === 'approve' && e.outcome === 'done').map((e) => e.item);
+  const done = events.filter((e) => e.step === 'approve' && e.outcome === 'merged').map((e) => e.item);
   const section = (heading: string, lines: string[]) => {
     out.push(`## ${heading}`, '', ...(lines.length ? lines : ['- none']), '');
   };

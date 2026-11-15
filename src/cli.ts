@@ -45,7 +45,8 @@ Setting up:
   asf validate                      check settings, policy, workflows, backlog and spec links
 
 Shipping:
-  asf release [--dry]               merge the integration branch into the base branch
+  asf release [--dry]               release what is on the base branch to production: a pull
+                                    request for you to merge, or a local merge without a remote
   asf deploy <env> [--yes]          show what a deploy will run and what changed since the last
                                     one; with --yes, run the product's deploy commands for <env>
 
@@ -192,7 +193,7 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       const r = release();
-      console.log(r.items.length ? `released ${r.items.join(', ')} (${r.commit})` : 'nothing to release');
+      console.log(!r.items.length ? 'nothing to release' : r.pr ? `release pull request for ${r.items.join(', ')}: ${r.pr}\nmerge it to go live` : `released ${r.items.join(', ')} (${r.commit})`);
       return 0;
     }
     case 'eval': {

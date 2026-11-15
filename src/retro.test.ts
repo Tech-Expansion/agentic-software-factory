@@ -63,6 +63,8 @@ beforeEach(() => {
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
   writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', 'check: ["test -f hello.txt"]').replace('notifications: desktop', 'notifications: none'));
+  // hello.txt is the owner's to decide, so a built item waits in review instead of merging on its own.
+  writeFileSync(join(root, '.factory/policy.yaml'), 'owner_paths: ["hello.txt"]\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'init']);
   process.chdir(root);

@@ -19,8 +19,12 @@ export interface ProjectConfig {
   hypothesis?: string;
   success_metric?: string;
   kill_criteria?: string;
+  /** The development line: items that pass merge into it on their own. */
   base_branch?: string;
-  integration_branch?: string;
+  /** What is live: only the owner's release brings the base branch into it. */
+  production_branch?: string;
+  /** The git remote the release pull request goes to; without one, `asf release` merges locally. */
+  remote?: string;
   runtimes?: { default?: RuntimeName; roles?: Record<string, RuntimeName> };
   models?: Record<string, string>;
   commands: { setup?: string[]; check: string[] };

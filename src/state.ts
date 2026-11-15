@@ -6,7 +6,7 @@ import { dirname } from 'node:path';
  * everything that happens in between lives here.
  */
 export interface ItemState {
-  /** plan-review: a high-risk item's plan waits for the owner. merged: in the integration branch, not released yet. */
+  /** plan-review: a high-risk item's plan waits for the owner. merged: in the base branch, not in production yet. */
   state: 'in-progress' | 'review' | 'blocked' | 'rework' | 'plan-review' | 'merged';
   branch: string;
   worktree: string;
@@ -20,6 +20,8 @@ export interface ItemState {
   plan?: { text: string; approved?: string; by?: 'tech-lead' | 'owner' };
   /** The commit with the item's acceptance tests, and the files in it, which later steps cannot change. */
   tests?: { commit: string; files: string[] };
+  /** The merge commit on the base branch, once merged: the item is released when production contains it. */
+  commit?: string;
   updated_at: string;
 }
 

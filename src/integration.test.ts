@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
 import { init } from './commands/init.js';
-import { approve, reject, release, releasable } from './commands/review.js';
+import { approve, markReleased, reject, release, releasable } from './commands/review.js';
 import { run } from './commands/run.js';
 import { validateProduct } from './commands/validate.js';
-import { git } from './git.js';
+import { currentBranch, git } from './git.js';
 import { readEvents } from './runlog.js';
 import { loadState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
@@ -50,33 +50,71 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'asf-product-'));
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8').replace('notifications: desktop', 'notifications: none') + 'integration_branch: integration\n');
+  writeFileSync(project, readFileSync(project, 'utf8').replace('notifications: desktop', 'notifications: none'));
   writeFileSync(join(root, '.factory/policy.yaml'), 'sensitive_paths: ["keys/**"]\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'init']);
   process.chdir(root);
 });
 
-test('items that pass merge into the integration branch on their own; the owner releases them as a batch', async () => {
+test('items that pass merge into main on their own; the owner releases them to production as a batch', async () => {
   item(1);
   item(2, 'depends_on: [B-0001]\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'items']);
-  const main = git(root, ['rev-parse', 'main']).trim();
+  const before = git(root, ['rev-parse', 'main']).trim();
+  writeFileSync(join(root, 'notes.txt'), 'the owner\'s own work in progress\n');
   const out = await run({ all: true, context: { runtime: () => team() } });
   assert.deepEqual(out.map((o) => `${o.id}:${o.state}`), ['B-0001:merged', 'B-0002:merged'], 'a merged item counts as done for what depends on it');
-  assert.equal(git(root, ['rev-parse', 'main']).trim(), main, 'nothing reaches main without the owner');
-  assert.match(git(root, ['show', 'integration:f2.txt']), /f2/);
-  assert.match(git(root, ['show', 'integration:f1.txt']), /f1/, 'B-0002 was built on top of B-0001');
+  assert.ok(existsSync(join(root, 'f1.txt')) && existsSync(join(root, 'f2.txt')), 'main, checked out here, moved forward');
+  assert.equal(readFileSync(join(root, 'notes.txt'), 'utf8'), 'the owner\'s own work in progress\n', 'without touching what the owner had not committed');
+  assert.match(readFileSync(join(root, 'backlog/0001-x.md'), 'utf8'), /status: done/);
+  assert.equal(git(root, ['rev-parse', 'production']).trim(), before, 'nothing is live without the owner');
   assert.deepEqual(releasable(), ['B-0001', 'B-0002']);
   assert.deepEqual(await run({ all: true, context: { runtime: () => team() } }), [], 'merged items are not built again');
 
   const r = release();
   assert.deepEqual(r.items, ['B-0001', 'B-0002']);
-  assert.ok(existsSync(join(root, 'f1.txt')) && existsSync(join(root, 'f2.txt')));
-  assert.match(readFileSync(join(root, 'backlog/0001-x.md'), 'utf8'), /status: done/);
-  assert.match(git(root, ['log', '-1', '--format=%s']), /Release B-0001, B-0002/);
-  assert.equal(git(root, ['rev-parse', 'integration']).trim(), git(root, ['rev-parse', 'main']).trim());
+  assert.equal(r.pr, undefined, 'without a remote it is merged here');
+  assert.match(git(root, ['show', 'production:f2.txt']), /f2/);
+  assert.match(git(root, ['log', '-1', '--format=%B', 'production']), /Release B-0001, B-0002[\s\S]*- \*\*B-0001\*\* Item 1/);
+  assert.equal(git(root, ['rev-parse', 'production^{tree}']).trim(), git(root, ['rev-parse', 'main^{tree}']).trim());
+  assert.equal(currentBranch(root), 'main', 'the owner\'s checkout stays where it was');
+  assert.deepEqual(loadState(join(root, '.factory/state.json')).items, {});
+  assert.deepEqual(release().items, [], 'nothing left to release');
+});
+
+test('with a remote, the release is a pull request the owner merges, and the items are done once it is', async () => {
+  const remote = mkdtempSync(join(tmpdir(), 'asf-remote-'));
+  git(remote, ['init', '-q', '--bare']);
+  git(root, ['remote', 'add', 'origin', remote]);
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'remote: origin\n');
+  item(1);
+  commitItems();
+  await run({ context: { runtime: () => team() } });
+  const bin = mkdtempSync(join(tmpdir(), 'asf-bin-'));
+  const calls = join(bin, 'calls');
+  writeFileSync(join(bin, 'gh'), `#!/bin/sh\necho "$@" >> '${calls}'\ncase "$2" in list) echo '[]';; create) echo https://example.invalid/pull/1;; esac\n`, { mode: 0o755 });
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    const r = release();
+    assert.equal(r.pr, 'https://example.invalid/pull/1');
+    assert.match(readFileSync(calls, 'utf8'), /pr create --head main --base production --title Release B-0001/);
+  } finally {
+    process.env.PATH = path;
+  }
+  assert.equal(git(remote, ['rev-parse', 'main']).trim(), git(root, ['rev-parse', 'main']).trim(), 'main was pushed');
+  assert.deepEqual(releasable(), ['B-0001'], 'not done until the pull request is merged');
+
+  // The owner merges the pull request on the remote.
+  const clone = mkdtempSync(join(tmpdir(), 'asf-clone-'));
+  git(clone, ['clone', '-q', '-b', 'production', remote, '.']);
+  git(clone, ['merge', '-q', '--no-ff', 'origin/main', '-m', 'Merge pull request #1']);
+  git(clone, ['push', '-q', 'origin', 'production']);
+  assert.deepEqual(markReleased(), ['B-0001']);
+  assert.equal(git(root, ['rev-parse', 'production']).trim(), git(remote, ['rev-parse', 'production']).trim());
   assert.deepEqual(loadState(join(root, '.factory/state.json')).items, {});
 });
 
@@ -88,8 +126,8 @@ test('a change to a sensitive path merges once the tech lead passed it; a migrat
   const out = await run({ all: true, context: { runtime: () => team() } });
   assert.deepEqual(out.map((o) => `${o.id}:${o.state}`), ['B-0001:merged', 'B-0002:review']);
   assert.deepEqual(out[1]?.flags, ['db/migrations/001.sql'], 'owner_paths wait however the change was reviewed');
-  assert.equal(approve('B-0002').into, 'integration');
-  assert.match(git(root, ['show', 'integration:db/migrations/001.sql']), /migrations/);
+  assert.equal(approve('B-0002').into, 'main');
+  assert.match(git(root, ['show', 'main:db/migrations/001.sql']), /migrations/);
 });
 
 test('a decision the tech lead escalates holds the change for the owner without failing it', async () => {

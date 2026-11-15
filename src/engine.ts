@@ -27,7 +27,7 @@ export interface EngineContext {
 export interface ItemOutcome {
   id: string;
   /**
-   * merged: passed review and merged into the integration branch on its own (by `asf run`). paused: the CLI hit a
+   * merged: passed review and merged into the base branch on its own (by `asf run`). paused: the CLI hit a
    * usage limit; the item resumes from where it was once the quota resets.
    */
   state: 'review' | 'blocked' | 'plan-review' | 'merged' | 'paused';
@@ -103,13 +103,17 @@ export function stepApplies(step: AgentStep, item: BacklogItem, changed: string[
   return globs.length > 0 && changed.some((f) => matchesAny(f, globs));
 }
 
-/** The branch items start from: the integration branch, created from the base branch the first time. */
-export function integrationBase(root: string, project: ProjectConfig): string {
-  const base = project.base_branch ?? 'main';
-  const integration = project.integration_branch;
-  if (!integration) return base;
-  if (!git(root, ['branch', '--list', integration]).trim()) git(root, ['branch', integration, base]);
-  return integration;
+/**
+ * The production branch, created the first time from the base branch (or from the remote's, if it has one): what was
+ * there before the team built anything counts as released.
+ */
+export function productionBranch(root: string, project: ProjectConfig): string {
+  const production = project.production_branch ?? 'production';
+  if (git(root, ['branch', '--list', production]).trim()) return production;
+  const remote = project.remote && `refs/remotes/${project.remote}/${production}`;
+  const from = remote && git(root, ['rev-parse', '-q', '--verify', remote], true).trim() ? remote : (project.base_branch ?? 'main');
+  git(root, ['branch', production, from]);
+  return production;
 }
 
 /** The runner does not take "pass" on trust: an unmet criterion or a blocker finding fails the item. */
@@ -142,8 +146,9 @@ function stopHook(paths: ProductPaths, item: string, name: string, cfg: Omit<Sto
 /** Runs one item. `given` is the workflow to use instead of the item's own: feature, when a quick change escalates. */
 export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Workflow): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
-  // Items branch from the integration branch when there is one, so each builds on what is already merged.
-  const base = integrationBase(paths.root, project);
+  // Items branch from the base branch, so each builds on what is already merged; production is set apart first.
+  const baseBranch = project.base_branch ?? 'main';
+  productionBranch(paths.root, project);
   const log = ctx.log ?? (() => {});
   const all = loadState(paths.state);
   const prev = all.items[item.id];
@@ -195,7 +200,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
   }
 
   const fresh = !existsSync(worktree);
-  ensureWorktree(paths.root, worktree, branch, base);
+  ensureWorktree(paths.root, worktree, branch, baseBranch);
+  // What the item changed is measured from where it forked: the base branch moves while it runs, as others merge.
+  const base = git(worktree, ['merge-base', 'HEAD', baseBranch]).trim();
   // Tests written for an earlier run stay locked, as long as the branch still has them.
   if (prev?.tests && isAncestor(worktree, prev.tests.commit)) st.tests = prev.tests;
   st.plan = prev?.plan;
@@ -426,7 +433,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
 
     if (!failed) {
       const changed = stageAndList(worktree, base);
-      // Anything flagged waits for the owner on its own, even with an integration branch: what cannot be undone,
+      // Anything flagged waits for the owner instead of merging on its own: what cannot be undone,
       // and what a reviewer left for them. A workflow without the tech lead's review leaves the owner the review of
       // approval and sensitive paths, and of high-risk items.
       const flags = [...changed.filter((f) => matchesAny(f, policy.owner_paths)), ...escalated];

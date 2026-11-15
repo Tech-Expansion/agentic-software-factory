@@ -11,7 +11,11 @@ hypothesis: ""
 success_metric: ""
 kill_criteria: ""
 
+# main is the development line: what passes merges there on its own.
+# production is what is live: it moves only when you release.
 base_branch: main
+production_branch: production
+# remote: origin   # with a remote, `asf release` opens a pull request to production for you to merge
 
 runtimes:
   default: claude-code
