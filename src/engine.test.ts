@@ -92,6 +92,15 @@ test('an item that passes checks and review waits for approval, and approve merg
   assert.match(report(), /Done\n\n- B-0001 Say hello/);
 });
 
+test('validate says when the plan is not committed, since the team builds from what is', () => {
+  const fresh = mkdtempSync(join(tmpdir(), 'asf-product-'));
+  init(fresh, 'demo');
+  assert.match(validateProduct(fresh).errors.join('\n'), /nothing is committed yet[\s\S]*git add -A && git commit/);
+  assert.deepEqual(validateProduct(root).warnings.filter((w) => /not committed/.test(w)), []);
+  writeFileSync(join(root, 'backlog/0002-more.md'), '---\nid: B-0002\ntitle: More\nstatus: draft\n---\nLater.\n');
+  assert.match(validateProduct(root).warnings.join('\n'), /the plan has changes that are not committed/);
+});
+
 test('failed checks go back to the developer with the output, without a model review', async () => {
   const rt = fake((c, n) => (c.access === 'write' ? (n === 1 ? { write: { 'other.txt': 'x' } } : { write: { 'hello.txt': 'hi' } }) : { structured: verdict(true) }));
   const [out] = await run({ context: { runtime: () => rt } });

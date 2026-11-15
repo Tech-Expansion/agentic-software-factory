@@ -132,7 +132,7 @@ async function main(argv: string[]): Promise<number> {
       const r = init(args[0] ?? '.', values.name);
       for (const f of r.created) console.log(`created ${f}`);
       for (const f of r.skipped) console.log(`kept    ${f}`);
-      console.log('\nNext: fill in .factory/project.yaml (commands.check above all), then run `asf discover`.');
+      console.log('\nNext: run `asf discover` there to plan the product with the product owner.');
       return 0;
     }
     case 'discover':

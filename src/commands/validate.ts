@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadBacklog } from '../backlog.js';
 import { ConfigError, loadPolicy, loadProject, suggestedSpecialists, type ProjectConfig } from '../config.js';
+import { git, isRepo } from '../git.js';
 import { findProductRoot, productPaths } from '../paths.js';
 import { loadRole, loadSkill } from '../prompt.js';
 import { loadWorkflow, writesTests } from '../workflow.js';
@@ -67,6 +68,13 @@ export function validateProduct(cwd: string = process.cwd()): { errors: string[]
     const spec = readFileSync(specFile, 'utf8');
     for (const ac of item.criteria ?? []) if (!spec.includes(ac)) errors.push(`${item.id}: ${ac} not found in ${item.spec}`);
     if (item.status === 'ready' && !item.criteria?.length) warnings.push(`${item.id}: ready without acceptance criteria`);
+  }
+
+  // Every item is built in a worktree of the base branch, so the team only sees a plan that is committed.
+  if (isRepo(root)) {
+    const save = 'the team builds from what is committed. Save it with: git add -A && git commit -m "Plan the product"';
+    if (!git(root, ['rev-parse', '-q', '--verify', 'HEAD'], true).trim()) errors.push(`nothing is committed yet; ${save}`);
+    else if (git(root, ['status', '--porcelain', '--', 'backlog', 'specs', 'product', '.factory', 'AGENTS.md'], true).trim()) warnings.push(`the plan has changes that are not committed; ${save}`);
   }
 
   const own = join(paths.factory, 'workflows');

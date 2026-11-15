@@ -1,117 +1,82 @@
 # agentic-software-factory
 
-A local-first software team of AI agents. It turns a rough idea into tested, documented software, using your own
-Claude Code or Codex subscription.
+A software team of AI agents that works on your own machine. You say what you want; the team plans it with you,
+builds it, tests it and reviews it, using your own Claude Code or Codex subscription.
 
-You are its owner, the way a client is to a team they hired: you decide what the product does, what it costs and when
-it ships, and the team makes the technical calls.
+You are the client. You decide what the product does and when it ships. The team makes the technical calls and
+comes back to you only with decisions that are yours.
 
 > Status: 0.1, experimental. Works end to end with Claude Code 2.1 and codex-cli 0.147. Not yet on npm.
 
-## The team
+## What you need
 
-| Role | When |
-| --- | --- |
-| **Product owner** | With you in `asf discover`: scans the market, writes the brief, specs and backlog, and proposes specialists. Unattended: clarifies new items, asks only what it cannot settle, and sizes them |
-| **QA** | Writes acceptance tests from the criteria before the build and locks them; after the build, judges the change against the criteria |
-| **Developer** | Builds the item in its own git worktree until the checks pass |
-| **Tech lead** | Plans a high-risk item; reviews every change as the senior developer who did not write it; decides lessons |
-| **Security reviewer**, **UX designer** | Specialists, off until you turn them on in `specialists:` |
-| **DevOps engineer** | CI, images, infrastructure and deploy scripts (the `infra` workflow); you run the deploy |
-| **Scrum master** | After an item that needed rework: proposes a lesson, as a check rather than a longer prompt |
-
-```mermaid
-flowchart LR
-  R[ready item] --> T[QA: acceptance tests, locked]
-  T --> B[developer]
-  B --> C[your checks]
-  C --> V[QA: verdict]
-  V --> L[tech lead: review]
-  L --> S[specialists, if on]
-  S --> M[integration branch, or waits for you]
-  C & V & L & S -->|fail| B
-```
-
-A small item skips the tests written first; one that touches a sensitive path is built again with them. What waits
-for you: the product owner's questions, a migration (`owner_paths`), a decision a reviewer escalates (a cost,
-something irreversible, the agreed architecture), the release and the deploy. The team decides the rest, and you can
-reverse a lesson with `asf decide L-n`. See [ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md).
-
-## Why it is built this way
-
-- **Your subscription, your machine.** It drives the official CLIs you are signed in to, as subprocesses, and never
-  touches a credential ([ADR 0001](docs/adr/0001-run-inside-the-users-own-agent-cli.md)).
-- **Spec-driven.** Criteria are numbered; tests and verdicts are named after them.
-- **Tokens are a design metric.** Each step gets only its role, its skills and its item's artifacts; cheap checks run
-  before any model review; every step logs what it used.
-- **Policy is code, not a prompt.** Protected paths are put back, denied commands refused, budgets enforced, and a
-  product can only tighten the defaults. Agents run sandboxed ([ADR 0004](docs/adr/0004-sandbox-agent-commands-and-checks.md)).
+- [Node.js](https://nodejs.org) 22 or later, and git
+- [Claude Code](https://claude.com/claude-code) or Codex, installed and signed in
+- macOS, Linux or Windows
 
 ## Install
-
-Node.js 22+, git, Claude Code and/or Codex signed in, and the sandbox runtime
-(`npm install -g @anthropic-ai/sandbox-runtime`; on Linux also `bubblewrap` and `socat`).
 
 ```bash
 git clone https://github.com/Tech-Expansion/agentic-software-factory.git
 ```
 
 ```bash
-cd agentic-software-factory && npm install && npm run build && npm link
+cd agentic-software-factory
 ```
-
-## Use
 
 ```bash
-asf init my-idea && cd my-idea
+npm install && npm run build && npm link
 ```
 
-1. In `.factory/project.yaml`, set `integration_branch: integration` so passing items merge on their own and you
-   release in batches.
-2. `asf discover`: plan with the product owner. Items become `ready` only when you agree.
-3. Set `commands.check` (lint, build, test) once the stack is known, then `asf validate`.
-4. `asf run --watch` keeps the team working; `asf` shows the board and every decision waiting for you, with the
-   command that gives it.
+`asf --help` now works in any folder.
+
+## Your first product
+
+1. **Create it.**
+
+   ```bash
+   asf init my-idea
+   ```
+
+   ```bash
+   cd my-idea
+   ```
+
+2. **Plan it.** `asf discover` opens a conversation with the product owner. It asks about your idea one question at a
+   time, then writes the brief, the specs and the list of work. Nothing is built until you agree to it.
+3. **Check it.** `asf validate` tells you if anything is missing before the team starts, and how to save the plan
+   so the team can see it.
+4. **Let the team work.** `asf run --watch` builds the items one after another until you stop it with Ctrl-C.
+5. **Decide what is yours.** `asf` shows the board: what the team is doing, and every decision waiting for you with
+   the exact command that gives it.
+
+## Everyday commands
 
 | Command | What it does |
 | --- | --- |
-| `asf [--json]`, `asf --date <day>` | The board, or the report of one day |
-| `asf decide <id> …` | `approve`, `reject <reason>`, `retry`, `Q1 <answer>`, `accept`; `accept` or `reject` a lesson `L-n` |
-| `asf show <id>` | An item's open questions, its branch and why it stopped; or a lesson |
-| `asf run [--item id] [--all] [--watch]` | Build now, or keep working unattended (`--workers n`, `--interval s`, `--once`) |
-| `asf init`, `asf discover`, `asf validate` | Set up and plan a product |
-| `asf release [--dry]`, `asf deploy <env> [--yes]` | Ship: merge the integration branch; run the deploy commands with your credentials |
-| `asf clarify`, `asf sync` | One round of what `--watch` does: clarify new items; sync with Jira ([ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md)) |
-| `asf eval` | Measure the factory on its eval cases (factory development) |
+| `asf` | The board: progress, and what waits for you |
+| `asf show <id>` | One item: its questions, its work, why it stopped |
+| `asf decide <id> …` | Your decision: `approve`, `reject <reason>`, `retry`, or an answer such as `Q1 web` |
+| `asf run --watch` | Keep the team working |
+| `asf release` | Ship what the team finished into your main branch |
 
-## Make it yours
+`asf --help` lists the rest.
 
-A product repository holds `product/`, `specs/`, `backlog/`, `docs/`, its code and one `.factory/` folder; delete
-`.factory/` and it is an ordinary repository. Without changing the factory
-([ADR 0009](docs/adr/0009-product-overrides-and-the-quick-workflow.md)):
+## Is it safe?
 
-- `.factory/agents/<role>.md` and `.factory/skills/<name>/SKILL.md` add product rules to a role or a skill.
-- `.factory/workflows/<name>.yaml` replaces a workflow or adds one; `workflow:` picks the default, per item or per
-  ticket label `asf-<name>`.
-- `specialists:`, `paths:`, `models:`, `runtimes.roles:` and `deploy:` in `project.yaml`; `owner_paths`,
-  `sensitive_paths` and the network allowlist in `.factory/policy.yaml`.
+Each item is built in its own copy of your code and reaches your main branch only when you say so. Changes the team
+makes to your plans, specs or settings are undone, and anything that looks like a password or key is never committed.
 
-## Known limits
+By default the commands an agent runs have the same access to your machine as you do, like any coding agent you run
+yourself. For a product that handles keys, money or personal data, turn on the sandbox:
+[how](ARCHITECTURE.md#the-sandbox).
 
-- The sandbox is not a container. Codex has no network but can read what its user can; the secret scan before each
-  commit is the backstop there.
-- The size call, the tech lead's escalations and the market scan are a model's judgement, not yet measured.
-  Unattended agents have no web access.
-- Codex enforces access through its sandbox only; the denied commands and the checks inside the developer's session
-  ([ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)) apply to Claude Code.
-- SRE is designed, not built. Jira is the only tracker, not yet checked against the real `acli`.
+## Go deeper
 
-## Development
-
-`npm test` uses a fake runtime and spends no tokens. `asf eval` builds the cases in `evals/cases/` against hidden
-tests with your CLI (`--trials k` for pass^k); `asf eval --reference` checks the cases with their own solutions, as CI
-does. What is measured and what is next: the [roadmap](docs/roadmap.md). Rules for changing this repository:
-[AGENTS.md](AGENTS.md).
+- [ARCHITECTURE.md](ARCHITECTURE.md): the team, how an item is built, what the runner enforces, settings, platforms
+- [docs/roadmap.md](docs/roadmap.md): what works, how it is measured, what is next
+- [docs/adr/](docs/adr/): the decisions behind it, and why
+- [AGENTS.md](AGENTS.md): working on the factory itself
 
 ## License
 

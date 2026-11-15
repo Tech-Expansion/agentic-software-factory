@@ -11,8 +11,10 @@ decisions get an ADR.
 - No policy breach: protected paths, denied commands, budgets, locked acceptance tests.
 - Nothing reaches the base branch without the owner's release. A change to `owner_paths`, or one a reviewer
   escalates, waits for the owner however it was reviewed.
-- No secret leaves the machine through the factory: agent commands and checks run sandboxed, without secrets in their
-  environment and without network access beyond an allowlist.
+- Nothing that looks like a secret is committed, and checks run without secrets in their environment.
+- With the sandbox on (opt-in, ADR 0013), no secret leaves the machine through the factory: agent commands and checks
+  run sandboxed, without network access beyond an allowlist. Without it, a command an agent runs has the owner's
+  access.
 
 **Measured, at least 95%.** On the eval set (`asf eval`) and on real work:
 
@@ -33,7 +35,8 @@ workers, Cognition on multi-agents, Spotify's verification loops, Every's compou
 and tests, Simon Willison's lethal trifecta, Dex Horthy and Harper Reed on planning.
 
 1. **Cut one leg of the lethal trifecta.** Private data, untrusted content and a way out together turn prompt
-   injection into exfiltration, so agents run sandboxed and unattended ones never browse the web.
+   injection into exfiltration, so unattended agents never browse the web, and a product that holds private data
+   turns the sandbox on.
 2. **Evals that still have signal.** A capability suite that starts low, a regression suite near 100%, pass^k over
    several trials, transcripts kept for error analysis.
 3. **Whoever writes the code does not write its acceptance tests**, and cannot change, skip or delete them.
@@ -49,7 +52,8 @@ and tests, Simon Willison's lethal trifecta, Dex Horthy and Harper Reed on plann
 
 Built and covered by tests with a fake runtime:
 
-- Evals with hidden tests and pass^k; the sandbox; acceptance tests written first and locked (ADR 0004).
+- Evals with hidden tests and pass^k; the sandbox, opt-in; acceptance tests written first and locked (ADR 0004,
+  0013).
 - Intake and the Definition of Ready: the product owner scans the market in discovery, clarifies and sizes items.
 - Product overrides of roles, skills and workflows, and a quick workflow for small changes (ADR 0009).
 - A product team: product owner, developer, QA and tech lead on every item; security reviewer and UX designer as
@@ -82,7 +86,8 @@ Exit: every bar in "What works means" is met. Then 1.0 and the npm release.
   Ask Anthropic before promoting the product; API keys remain the fallback.
 - **The eval set grades the factory only as well as its cases.** Hidden tests are written or reviewed by a person,
   and cases are added whenever real work finds a failure the set missed.
-- **The sandbox is only as tight as its allowlist.** A package registry on the allowlist is a way out for anything
-  that can publish to it; publishing commands stay denied and registries need no credentials.
+- **The sandbox is off by default, and only as tight as its allowlist when on.** Off, an agent's command can read
+  and send what the owner can (ADR 0013). On, a package registry on the allowlist is a way out for anything that can
+  publish to it; publishing commands stay denied and registries need no credentials.
 - **Judgement calls are unmeasured.** The size call, the tech lead's escalations and lesson decisions, and the market
   scan are a model's judgement until the pilot measures them.
