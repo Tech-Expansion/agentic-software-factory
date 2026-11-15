@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Tech-Expansion/agentic-software-factory/schemas/stack.schema.json",
+  "title": "The tech lead's choice of the stack, after discovery",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decided", "reason"],
+  "properties": {
+    "decided": { "type": "boolean", "description": "False when the brief does not yet say enough (who uses it, on what devices, what it may cost) to choose." },
+    "reason": { "type": "string", "minLength": 1, "description": "Why this stack, in one or two sentences; or what the brief still has to say." },
+    "stack": { "type": "string", "description": "The stack in one line, for example: Next.js and TypeScript, SQLite, hosted on Vercel." },
+    "title": { "type": "string", "description": "The ADR's title, for example: Next.js and SQLite for the first version." },
+    "adr": { "type": "string", "description": "The ADR body in Markdown: context, options considered, decision, consequences. Without the title line." },
+    "setup": { "type": "array", "items": { "type": "string" }, "description": "Commands run once in each new worktree. They must work on a repository that has no code yet." },
+    "check": { "type": "array", "items": { "type": "string" }, "description": "Lint, build and test, run before any model review. They may assume the first item has scaffolded the project." }
+  }
+}

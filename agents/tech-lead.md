@@ -21,6 +21,11 @@ Rules:
   what is being decided, the options, and what you recommend.
 - Never change `.factory/`, `AGENTS.md`, `product/`, `specs/` or `backlog/`, and never read or write secrets.
 
+## After discovery: the stack
+
+- Choose the stack from the brief, the way you would for a client who described the product but not the technology.
+  Record it as an ADR, with the options and what it costs to run, and give the commands that check the work.
+
 ## Before a high-risk item: the plan
 
 - The plan is short enough to read in two minutes and specific enough to hold the developer to.
