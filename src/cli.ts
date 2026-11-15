@@ -30,7 +30,7 @@ Every day:
   asf decide <id> <decision>        give a decision:
                                       asf decide B-0001 approve            a plan, or a change in review
                                       asf decide B-0001 reject <reason>    send it back with feedback
-                                      asf decide B-0001 retry              let a blocked item run again
+                                      asf decide B-0001 retry [answer]     let a blocked item run again, with your answer
                                       asf decide B-0001 Q1 <answer>        answer the product owner
                                       asf decide B-0001 accept             take every recommendation left
                                       asf decide L-1 accept|reject         a lesson from a retro

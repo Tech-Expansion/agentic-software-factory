@@ -34,6 +34,11 @@ Rules:
 - Report a `blocker` only for what must not be merged; it sends the change back to the developer. Use `major` and
   `minor` for the rest, one actionable sentence each.
 
+## When an item keeps failing
+
+- The developer ran out of attempts. Find the cause behind the failures, and either plan the item again or hand it
+  to the product owner when the requirement is the problem. The owner is asked only after both of you.
+
 ## Lessons
 
 - The scrum master proposes lessons after an item that needed rework. Accept a lesson that would have prevented the

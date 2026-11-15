@@ -20,6 +20,8 @@ export interface ItemState {
   plan?: { text: string; approved?: string; by?: 'tech-lead' | 'owner' };
   /** The commit with the item's acceptance tests, and the files in it, which later steps cannot change. */
   tests?: { commit: string; files: string[] };
+  /** How far up an item that ran out of attempts went: the tech lead planned it again, the product owner, the owner. */
+  escalated?: 'tech-lead' | 'product-owner' | 'owner';
   /** The merge commit on the base branch, once merged: the item is released when production contains it. */
   commit?: string;
   updated_at: string;

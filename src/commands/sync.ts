@@ -254,7 +254,7 @@ export async function sync(opts: SyncOptions = {}): Promise<string[]> {
             await move(link.key, 'in_progress');
             link.shown = 'in_progress';
           } else if (d.kind === 'retry' && now === 'blocked') {
-            retry(item.id, paths.root);
+            retry(item.id, paths.root, d.reason);
             await move(link.key, 'in_progress');
             link.shown = 'in_progress';
           } else {

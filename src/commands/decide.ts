@@ -3,7 +3,7 @@ import { answer, type ClarifyOutcome } from './clarify.js';
 import { openProduct, UsageError } from './context.js';
 import { approve, reject, retry } from './review.js';
 
-export const DECIDE_USAGE = `asf decide <item> approve | reject <reason> | retry | accept | <Q> <answer>
+export const DECIDE_USAGE = `asf decide <item> approve | reject <reason> | retry [answer] | accept | <Q> <answer>
 asf decide <lesson> accept | reject`;
 
 export function clarified(o: ClarifyOutcome): string {
@@ -34,7 +34,7 @@ export function decide(id: string, words: string[], root?: string): string {
       reject(id, text, root);
       return `${id}: sent back; it runs again on the next run`;
     case 'retry':
-      retry(id, root);
+      retry(id, root, text);
       return `${id}: it runs again on the next run`;
     case 'accept':
       return clarified(answer(id, undefined, '', { accept: true, root }));

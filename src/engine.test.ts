@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
-import { approve, reject } from './commands/review.js';
+import { openProduct } from './commands/context.js';
+import { approve, reject, retry } from './commands/review.js';
 import { run } from './commands/run.js';
 import { validateProduct } from './commands/validate.js';
 import { git } from './git.js';
 import { readEvents } from './runlog.js';
 import { loadState } from './state.js';
+import { board } from './status.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
@@ -101,13 +103,72 @@ test('failed checks go back to the developer with the output, without a model re
   assert.match(rt.calls[4]!.systemPrompt, /retrospective/, 'a second attempt gets a retro');
 });
 
-test('an item that keeps failing review is blocked after max_attempts', async () => {
+test('an item that keeps failing review goes to the tech lead before it blocks', async () => {
   const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(false) }));
   const [out] = await run({ context: { runtime: () => rt } });
   assert.equal(out?.state, 'blocked');
-  assert.equal(rt.calls.length, 5, 'tests, two builds and reviews, the retro');
-  assert.match(rt.calls[4]!.prompt, /What went wrong, in order[\s\S]*Attempt 1: QA/);
+  assert.match(out!.reason!, /still failing after 2 attempts; the tech lead's diagnosis was not valid/);
+  assert.equal(rt.calls.length, 6, 'two builds and reviews, the diagnosis, the retro');
   assert.match(rt.calls[2]!.prompt, /AC-001 not_met: no hello.txt/);
+  assert.match(rt.calls[4]!.systemPrompt, /# Skill: diagnose-failure/);
+  assert.match(rt.calls[4]!.prompt, /It kept failing:[\s\S]*Attempt 1:[\s\S]*Attempt 2:/);
+  assert.match(rt.calls[5]!.prompt, /What went wrong, in order[\s\S]*Attempt 1: QA/);
+});
+
+const skill = (c: AgentCall, name: string) => c.systemPrompt.includes(`# Skill: ${name}`);
+
+test('the tech lead plans a failing item again, and the developer gets a fresh set of attempts on the new plan', async () => {
+  const rt = fake((c) => {
+    if (c.access === 'write') return { write: { 'hello.txt': 'hi' } };
+    if (skill(c, 'diagnose-failure')) return { structured: { diagnosis: 'It wrote the file in the wrong place.', cause: 'code', plan: 'Write hello.txt at the repository root.' } };
+    return { structured: verdict(/at the repository root/.test(c.prompt)) };
+  });
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'review');
+  const third = rt.calls.filter((c) => c.access === 'write')[2]!;
+  assert.match(third.prompt, /The approved plan[\s\S]*at the repository root/);
+  assert.match(third.prompt, /The tech lead looked at why it kept failing: It wrote the file in the wrong place/);
+  assert.ok(readEvents(join(root, '.factory/runs')).some((e) => e.step === 'diagnose' && e.outcome === 'replanned'));
+});
+
+test('when the requirement is the problem, the product owner splits the item into smaller ready ones', async () => {
+  const rt = fake((c) => {
+    if (c.access === 'write') return { write: { 'hello.txt': 'hi' } };
+    if (skill(c, 'diagnose-failure')) return { structured: { diagnosis: 'Too big for one change.', cause: 'requirement' } };
+    if (skill(c, 'rescope-item'))
+      return { structured: { decision: 'split', reason: 'two separate screens', items: [{ title: 'Hello screen', body: '- AC-001: hello.txt exists.' }, { title: 'Bye screen', body: '- AC-001: bye.txt exists.' }] } };
+    return { structured: verdict(false) };
+  });
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'split');
+  assert.equal(out?.reason, 'split into B-0002, B-0003: two separate screens');
+  assert.match(readFileSync(join(root, 'backlog/0001-hello.md'), 'utf8'), /status: draft[\s\S]*Split into B-0002, B-0003 by the product owner/);
+  assert.match(readFileSync(join(root, 'backlog/0003-b-0001-part-2.md'), 'utf8'), /title: "Bye screen"\nstatus: ready\npriority: 1\ndepends_on: \[B-0002\]/);
+  assert.deepEqual(validateProduct().errors, []);
+  assert.equal(loadState(join(root, '.factory/state.json')).items['B-0001'], undefined);
+  assert.equal(existsSync(join(root, '.factory/worktrees/B-0001')), false);
+  assert.equal(git(root, ['status', '--porcelain', '--untracked-files=no']).trim(), '', 'the split is committed');
+});
+
+test('a scope change is the owner\'s: asked in business terms, and their answer goes back to the team', async () => {
+  const rt = fake((c) => {
+    if (c.access === 'write') return { write: { 'hello.txt': 'hi' } };
+    if (skill(c, 'diagnose-failure')) return { structured: { diagnosis: 'Sending SMS needs a paid provider.', cause: 'requirement' } };
+    if (skill(c, 'rescope-item')) return { structured: { decision: 'ask', reason: 'a new cost', question: 'Should people get the code by SMS, which costs about 0.05 USD a message, or by email?', options: ['SMS', 'email'], recommended: 'email, free and enough for now' } };
+    return { structured: verdict(false) };
+  });
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'blocked');
+  const [d] = board(openProduct()).decisions;
+  assert.equal(d?.kind, 'answer');
+  assert.match(d!.what, /Should people get the code by SMS[\s\S]*Options: SMS \/ email\. Recommended: email/);
+  assert.equal(d?.how, 'asf decide B-0001 retry "<your answer>"');
+
+  retry('B-0001', undefined, 'email');
+  const st = loadState(join(root, '.factory/state.json')).items['B-0001']!;
+  assert.equal(st.state, 'rework');
+  assert.equal(st.escalated, undefined, 'it can go up the team again');
+  assert.match(st.feedback!, /The owner decided: email/);
 });
 
 test('changes to protected paths are put back and sent as feedback', async () => {

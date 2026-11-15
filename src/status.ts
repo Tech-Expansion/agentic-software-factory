@@ -101,7 +101,11 @@ export function board(product: Product, now: Date = new Date()): Board {
     else if (st.state === 'review')
       decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `decide on the change: ${st.flags.join('; ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.base_branch ?? 'main'}...${st.branch}, then asf decide ${item.id} approve`) });
     else if (st.state === 'blocked')
-      decisions.push({ ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf decide ${item.id} retry`) });
+      decisions.push(
+        st.escalated === 'owner'
+          ? { ...base, kind: 'answer', since: st.updated_at, what: st.reason ?? 'the team needs your decision', how: reply(item.tracker, '"/retry <your answer>"', `asf decide ${item.id} retry "<your answer>"`) }
+          : { ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf decide ${item.id} retry`) },
+      );
   }
   const merged = Object.entries(state.items).filter(([, v]) => v.state === 'merged');
   if (merged.length) {

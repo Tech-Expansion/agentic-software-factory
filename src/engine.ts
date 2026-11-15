@@ -1,15 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { subject, type BacklogItem } from './backlog.js';
+import { loadBacklog, setStatus, subject, type BacklogItem } from './backlog.js';
 import { formatChecks, runChecks } from './checks.js';
 import { modelFor, runtimeFor, validate, vendorSchema, type Policy, type ProjectConfig, type RuntimeName } from './config.js';
-import { commitAll, ensureWorktree, git, isAncestor, restorePaths, stagedDiff, stageAndList } from './git.js';
+import { commitAll, commitFiles, currentBranch, ensureWorktree, git, isAncestor, removeWorktree, restorePaths, stagedDiff, stageAndList } from './git.js';
 import { matchesAny } from './glob.js';
 import { findSecrets, testTampering } from './integrity.js';
 import type { StopHookConfig, StopHookCount } from './hooks/stop-checks.js';
 import { factoryRoot, type ProductPaths } from './paths.js';
 import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
-import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
+import { appendEvent, readEvents, saveTranscript, type RunEvent } from './runlog.js';
 import type { AgentResult, Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
 import { loadWorkflow, writesTests, type AgentStep, type Workflow } from './workflow.js';
@@ -28,9 +28,10 @@ export interface ItemOutcome {
   id: string;
   /**
    * merged: passed review and merged into the base branch on its own (by `asf run`). paused: the CLI hit a
-   * usage limit; the item resumes from where it was once the quota resets.
+   * usage limit; the item resumes from where it was once the quota resets. split: the product owner replaced it with
+   * smaller items.
    */
-  state: 'review' | 'blocked' | 'plan-review' | 'merged' | 'paused';
+  state: 'review' | 'blocked' | 'plan-review' | 'merged' | 'paused' | 'split';
   /** For paused: when the quota resets (ms since the epoch), if the CLI said. */
   resumeAt?: number;
   reason?: string;
@@ -58,6 +59,23 @@ export function rateLimited(r: AgentResult): boolean {
 }
 
 const PLAN_STEP: AgentStep = { id: 'plan', kind: 'agent', role: 'tech-lead', skills: ['plan-change'], access: 'read' };
+const DIAGNOSE_STEP: AgentStep = { id: 'diagnose', kind: 'agent', role: 'tech-lead', skills: ['diagnose-failure'], access: 'read' };
+const RESCOPE_STEP: AgentStep = { id: 'rescope', kind: 'agent', role: 'product-owner', skills: ['rescope-item'], access: 'read' };
+
+interface Diagnosis {
+  diagnosis: string;
+  cause: 'code' | 'requirement';
+  plan?: string;
+}
+
+interface Rescope {
+  decision: 'split' | 'ask';
+  reason: string;
+  items?: { title: string; body: string }[];
+  question?: string;
+  options?: string[];
+  recommended?: string;
+}
 
 interface Plan {
   approach: string;
@@ -161,6 +179,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     attempts: 0,
     tokens: prev?.tokens ?? 0,
     feedback: prev?.feedback,
+    escalated: prev?.escalated,
     updated_at: new Date().toISOString(),
   };
   const save = () => {
@@ -452,5 +471,88 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     save();
     event({ attempt, step: 'attempt', kind: 'item', outcome: 'failed', detail: failed.slice(0, 4000) });
   }
-  return finish('blocked', `still failing after ${policy.max_attempts} attempts`);
+  return escalate(`still failing after ${policy.max_attempts} attempts`);
+
+  /**
+   * Out of attempts, the item goes up the team before it reaches the owner. The tech lead finds the cause and plans it
+   * again, once, with a fresh set of attempts. When the requirement is the problem, or the new plan fails too, the
+   * product owner splits it into smaller items with the same scope, or asks the owner what the product should do.
+   */
+  async function escalate(why: string): Promise<ItemOutcome> {
+    const events = readEvents(paths.runs).filter((e) => e.item === item.id);
+    const history = events
+      .filter((e) => e.step === 'attempt' && e.outcome === 'failed')
+      .slice(-6)
+      .map((e) => `Attempt ${e.attempt}:\n${(e.detail ?? '').slice(0, 1500)}`)
+      .join('\n\n');
+    if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `${why}; token budget per item reached (${st.tokens})`);
+    if (!st.escalated) {
+      const { result, runtimeName } = await callAgent(DIAGNOSE_STEP, policy.max_attempts, { feedback: `It kept failing:\n\n${history}` }, 'diagnosis');
+      if (!result.ok) return stopped(result, runtimeName, 'diagnose');
+      const d = result.structured as Diagnosis;
+      if (validate('diagnosis', d).length) return finish('blocked', `${why}; the tech lead's diagnosis was not valid`);
+      st.escalated = 'tech-lead';
+      if (d.cause === 'code' && d.plan?.trim()) {
+        st.plan = { text: d.plan, approved: new Date().toISOString(), by: 'tech-lead' };
+        st.feedback = `The tech lead looked at why it kept failing: ${d.diagnosis}\n\nFollow the new plan.`;
+        st.state = 'rework';
+        save();
+        event({ step: 'diagnose', kind: 'item', outcome: 'replanned', detail: d.diagnosis });
+        log(`${item.id}: the tech lead planned it again: ${d.diagnosis}`);
+        return runItem(ctx, item, workflow);
+      }
+      event({ step: 'diagnose', kind: 'item', outcome: 'to the product owner', detail: d.diagnosis });
+      log(`${item.id}: the tech lead hands it to the product owner: ${d.diagnosis}`);
+    }
+    if (st.escalated !== 'tech-lead') return finish('blocked', why);
+
+    const diagnosis = readEvents(paths.runs).filter((e) => e.item === item.id && e.step === 'diagnose').at(-1)?.detail ?? '';
+    const { result, runtimeName } = await callAgent(RESCOPE_STEP, policy.max_attempts, { feedback: `The tech lead's diagnosis: ${diagnosis}\n\nWhat went wrong:\n\n${history}` }, 'rescope');
+    if (!result.ok) return stopped(result, runtimeName, 'rescope');
+    const r = result.structured as Rescope;
+    if (validate('rescope', r).length) return finish('blocked', `${why}; the product owner's decision was not valid`);
+    st.escalated = 'product-owner';
+    if (r.decision === 'split' && (r.items?.length ?? 0) >= 2) return split(r);
+    st.escalated = 'owner';
+    if (!r.question) return finish('blocked', `${why}: ${r.reason}`);
+    const options = r.options?.length ? ` Options: ${r.options.join(' / ')}.` : '';
+    const recommended = r.recommended ? ` Recommended: ${r.recommended}.` : '';
+    return finish('blocked', `the team needs your decision: ${r.question}${options}${recommended} (${r.reason})`);
+  }
+
+  /** The product owner's split: smaller ready items, built in order, and the item itself parked as a draft. */
+  function split(r: Rescope): ItemOutcome {
+    if (currentBranch(paths.root) !== baseBranch) return finish('blocked', `the product owner would split it, but the backlog is written on ${baseBranch}: check it out, then \`asf decide ${item.id} retry\`. ${r.reason}`);
+    const { items } = loadBacklog(paths.backlog);
+    let n = Math.max(0, ...items.map((i) => Number(i.id.slice(2))));
+    const files: string[] = [];
+    const ids: string[] = [];
+    for (const [k, part] of r.items!.entries()) {
+      n++;
+      const id = `B-${String(n).padStart(4, '0')}`;
+      const deps = k === 0 ? (item.depends_on ?? []) : [ids[k - 1]!];
+      const out = join(paths.backlog, `${String(n).padStart(4, '0')}-${item.id.toLowerCase()}-part-${k + 1}.md`);
+      writeFileSync(
+        out,
+        `---\nid: ${id}\ntitle: ${JSON.stringify(part.title)}\nstatus: ready\npriority: ${item.priority ?? n}\n${deps.length ? `depends_on: [${deps.join(', ')}]\n` : ''}${item.tracker ? `tracker: ${item.tracker}\n` : ''}---\n${part.body.trim()}\n\nSplit from ${item.id} by the product owner: ${r.reason}\n`,
+      );
+      files.push(out);
+      ids.push(id);
+    }
+    const own = items.find((i) => i.id === item.id);
+    if (own) {
+      setStatus(own.file, 'draft');
+      writeFileSync(own.file, `${readFileSync(own.file, 'utf8').trimEnd()}\n\nSplit into ${ids.join(', ')} by the product owner: ${r.reason}\n`);
+      files.push(own.file);
+    }
+    commitFiles(paths.root, files, `${subject(item, `chore(backlog): split ${item.id} into ${ids.join(', ')}`)}\n`);
+    removeWorktree(paths.root, worktree, branch);
+    const all = loadState(paths.state);
+    delete all.items[item.id];
+    saveState(paths.state, all);
+    const reason = `split into ${ids.join(', ')}: ${r.reason}`;
+    event({ step: 'rescope', kind: 'item', outcome: 'split', detail: reason });
+    log(`${item.id} ${reason}`);
+    return { id: item.id, state: 'split', reason, tokens: st.tokens, flags: [] };
+  }
 }

@@ -39,6 +39,8 @@ Rules for both modes:
   that cannot be recovered, external services, security. Preferences that are cheap to change later are assumptions.
 - Read the code only as far as it answers a question. You do not design or build.
 - Number questions Q1, Q2, ... in the order the owner should answer them.
+- When the team could not build an item, even on the tech lead's new plan, split it into smaller items with the
+  same scope, or ask the owner what the product should do instead: in business terms, never about code.
 - Size the item: `small` when it is one clear change to a few files with nothing to decide (a fix, a copy change, a
   config value); otherwise `normal`. A small item is built without acceptance tests written first, so when unsure,
   it is `normal`.
