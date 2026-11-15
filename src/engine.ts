@@ -437,6 +437,8 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
       // and what a reviewer left for them. A workflow without the tech lead's review leaves the owner the review of
       // approval and sensitive paths, and of high-risk items.
       const flags = [...changed.filter((f) => matchesAny(f, policy.owner_paths)), ...escalated];
+      // With dev deploying itself, a change to what runs with its credentials would run at once: the owner says when.
+      if (project.dev_deploy) flags.push(...changed.filter((f) => !flags.includes(f) && matchesAny(f, policy.deploy_paths)));
       if (!reviewed) {
         flags.push(...changed.filter((f) => !flags.includes(f) && (matchesAny(f, policy.approval_paths) || matchesAny(f, policy.sensitive_paths))));
         if (item.risk === 'high') flags.push('risk: high');

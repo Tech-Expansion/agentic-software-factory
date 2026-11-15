@@ -2,6 +2,7 @@ import { loadBacklog, setStatus, subject } from '../backlog.js';
 import { spawnSync } from 'node:child_process';
 import { loadClarification } from '../clarify.js';
 import { productionBranch } from '../engine.js';
+import { deployDev, type DeployResult } from './deploy.js';
 import { commitAll, fastForward, git, isAncestor, removeWorktree } from '../git.js';
 import { join, relative } from 'node:path';
 import { appendEvent } from '../runlog.js';
@@ -20,7 +21,7 @@ function reviewItem(id: string, root?: string) {
  * item done on its branch and merges it into the base branch, the development line. The merge is made in the item's
  * own worktree and the base branch then moves forward to it, so the owner's checkout never has to be clean or on it.
  */
-export function approve(id: string, root?: string): { merged: string; into: string; flags: string[] } {
+export function approve(id: string, root?: string): { merged: string; into: string; flags: string[]; dev?: DeployResult } {
   const { product, state, st } = reviewItem(id, root);
   const { paths, project } = product;
   if (st?.state === 'plan-review' && st.plan) {
@@ -58,7 +59,8 @@ export function approve(id: string, root?: string): { merged: string; into: stri
   state.items[id] = { ...st, state: 'merged', commit, reason: undefined, updated_at: new Date().toISOString() };
   saveState(paths.state, state);
   appendEvent(paths.runs, { at: new Date().toISOString(), item: id, step: 'approve', kind: 'item', outcome: 'merged', detail: base });
-  return { merged: st.branch, into: base, flags: st.flags ?? [] };
+  // A dev deploy that fails is logged and leaves the merge as it is; the next merge deploys again.
+  return { merged: st.branch, into: base, flags: st.flags ?? [], dev: deployDev(root) };
 }
 
 /** What the next release brings into production: items merged into the base branch and not released yet. */

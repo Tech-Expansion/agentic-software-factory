@@ -118,6 +118,40 @@ test('with a remote, the release is a pull request the owner merges, and the ite
   assert.deepEqual(loadState(join(root, '.factory/state.json')).items, {});
 });
 
+test('dev deploys itself after each merge, sandboxed, seeing only the secrets it was given', async () => {
+  const log = join(mkdtempSync(join(tmpdir(), 'asf-dev-')), 'log');
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + `dev_deploy:\n  run: commands\n  env: [DEV_DEPLOY_TOKEN]\ndeploy:\n  dev: ['echo "$(cat f1.txt) $DEV_DEPLOY_TOKEN \${OTHER_TOKEN:-hidden}" >> ${log}']\n`);
+  process.env.DEV_DEPLOY_TOKEN = 'dev-token';
+  process.env.OTHER_TOKEN = 'not-for-dev';
+  try {
+    item(1);
+    commitItems();
+    const [out] = await run({ context: { runtime: () => team() } });
+    assert.equal(out?.state, 'merged');
+  } finally {
+    delete process.env.DEV_DEPLOY_TOKEN;
+    delete process.env.OTHER_TOKEN;
+  }
+  assert.equal(readFileSync(log, 'utf8'), 'f1.txt dev-token hidden\n', 'main as merged, with only the allowed secret');
+  assert.equal(JSON.parse(readFileSync(join(root, '.factory/deploys.json'), 'utf8')).dev.commit, git(root, ['rev-parse', 'main']).trim());
+});
+
+test('with dev deploying itself, a change to a deploy script waits for the owner; push hands main to the hosting', async () => {
+  const remote = mkdtempSync(join(tmpdir(), 'asf-remote-'));
+  git(remote, ['init', '-q', '--bare']);
+  git(root, ['remote', 'add', 'origin', remote]);
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'remote: origin\ndev_deploy:\n  run: push\n');
+  item(1);
+  item(2, '', 'deploy/dev.sh');
+  commitItems();
+  const out = await run({ all: true, context: { runtime: () => team() } });
+  assert.deepEqual(out.map((o) => `${o.id}:${o.state}`), ['B-0001:merged', 'B-0002:review']);
+  assert.deepEqual(out[1]?.flags, ['deploy/dev.sh']);
+  assert.equal(git(remote, ['rev-parse', 'main']).trim(), git(root, ['rev-parse', 'main']).trim(), 'main was pushed after the merge');
+});
+
 test('a change to a sensitive path merges once the tech lead passed it; a migration waits for the owner', async () => {
   item(1, '', 'keys/sign.txt');
   item(2, '', 'db/migrations/001.sql');

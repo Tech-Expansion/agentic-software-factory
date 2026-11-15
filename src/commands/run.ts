@@ -81,8 +81,9 @@ export async function learn(ctx: EngineContext, item: BacklogItem, outcome: Item
 export function settle(product: Product, outcome: ItemOutcome, log?: (msg: string) => void): ItemOutcome {
   if (outcome.state !== 'review' || outcome.flags.length) return outcome;
   try {
-    const { into } = approve(outcome.id, product.paths.root);
+    const { into, dev } = approve(outcome.id, product.paths.root);
     log?.(`${outcome.id} merged into ${into}`);
+    if (dev) log?.(dev.text);
     return { ...outcome, state: 'merged' };
   } catch (err) {
     return { ...outcome, state: 'blocked', reason: (err as Error).message };

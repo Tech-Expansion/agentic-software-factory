@@ -36,6 +36,12 @@ export interface ProjectConfig {
   specialists?: string[];
   /** Commands per environment for `asf deploy <env>`, run by the runner with the owner's own environment. */
   deploy?: Record<string, string[]>;
+  /**
+   * How the dev environment deploys itself after each merge into the base branch: `push` pushes it to `remote` for
+   * the hosting or CI to deploy; `commands` runs `deploy.dev` sandboxed, seeing only the secrets in `env` and
+   * reaching only the package registries and the hosts in `network`.
+   */
+  dev_deploy?: { run: 'push' | 'commands'; env?: string[]; network?: string[] };
   opt_ins?: { backlog?: 'markdown'; docs?: 'markdown'; notifications?: 'desktop' | 'none' };
   tracker?: TrackerConfig;
 }
@@ -61,6 +67,8 @@ export interface Policy {
   denied_commands: string[];
   approval_paths: string[];
   owner_paths: string[];
+  /** What runs with credentials when dev deploys itself: a change here waits for the owner while dev_deploy is on. */
+  deploy_paths: string[];
   protected_paths: string[];
   sensitive_paths: string[];
   test_paths: string[];
@@ -139,6 +147,7 @@ export function mergePolicy(base: Policy, override: Partial<Omit<Policy, 'sandbo
     denied_commands: union(base.denied_commands, override.denied_commands),
     approval_paths: union(base.approval_paths, override.approval_paths),
     owner_paths: union(base.owner_paths ?? [], override.owner_paths),
+    deploy_paths: union(base.deploy_paths ?? [], override.deploy_paths),
     protected_paths: union(base.protected_paths, override.protected_paths),
     sensitive_paths: union(base.sensitive_paths, override.sensitive_paths),
     test_paths: union(base.test_paths, override.test_paths),

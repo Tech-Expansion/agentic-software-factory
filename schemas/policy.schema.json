@@ -24,6 +24,11 @@
       "items": { "type": "string" },
       "description": "Glob patterns. A change that touches one waits for the owner's approval, even after the tech lead's review."
     },
+    "deploy_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns for what runs with credentials when dev deploys itself (CI, deploy scripts, infrastructure). While dev_deploy is on, a change that touches one waits for the owner."
+    },
     "protected_paths": {
       "type": "array",
       "items": { "type": "string" },

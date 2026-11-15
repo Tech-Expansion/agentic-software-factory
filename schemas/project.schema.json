@@ -129,6 +129,17 @@
         "minItems": 1
       }
     },
+    "dev_deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "description": "The dev environment deploys itself after each merge into base_branch. run: push pushes base_branch to remote, and the hosting or CI deploys it (preferred). run: commands runs deploy.dev here, sandboxed: it sees only the secrets named in env and reaches only the package registries and the hosts in network. While it is on, a change to the policy's deploy_paths waits for the owner.",
+      "properties": {
+        "run": { "enum": ["push", "commands"] },
+        "env": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "network": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
     "opt_ins": {
       "type": "object",
       "additionalProperties": false,

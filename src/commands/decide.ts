@@ -28,7 +28,7 @@ export function decide(id: string, words: string[], root?: string): string {
   switch (what) {
     case 'approve': {
       const r = approve(id, root);
-      return r.into === 'plan' ? `${id}: plan approved; it is built on the next run` : `merged ${r.merged} into ${r.into}`;
+      return r.into === 'plan' ? `${id}: plan approved; it is built on the next run` : `merged ${r.merged} into ${r.into}${r.dev ? `\n${r.dev.text}` : ''}`;
     }
     case 'reject':
       reject(id, text, root);
