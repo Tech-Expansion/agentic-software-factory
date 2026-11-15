@@ -79,11 +79,16 @@ const VENDOR_UNSUPPORTED = new Set(['$schema', '$id', 'title', 'minLength', 'max
 
 /**
  * A schema as sent to a CLI's structured-output mode, which rejects some JSON Schema keywords. The runner still
- * validates the answer against the full schema.
+ * validates the answer against the full schema. The keys of `properties` are the answer's own field names, not
+ * keywords: a field called `title` stays, or the schema would require what it no longer allows.
  */
 export function vendorSchema(name: string): object {
-  const strip = (v: unknown): unknown =>
-    Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => !VENDOR_UNSUPPORTED.has(k)).map(([k, x]) => [k, strip(x)])) : v;
+  const strip = (v: unknown, names = false): unknown =>
+    Array.isArray(v)
+      ? v.map((x) => strip(x))
+      : v && typeof v === 'object'
+        ? Object.fromEntries(Object.entries(v).filter(([k]) => names || !VENDOR_UNSUPPORTED.has(k)).map(([k, x]) => [k, strip(x, !names && k === 'properties')]))
+        : v;
   return strip(loadSchema(name)) as object;
 }
 

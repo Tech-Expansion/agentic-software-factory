@@ -1,5 +1,6 @@
 import { claudeSandbox, prepareWritable, sandboxOff, toolchainEnv } from '../sandbox.js';
 import { exec, interactive, tail } from './exec.js';
+import type { Tokens } from '../runlog.js';
 import { noTokens, type AgentCall, type AgentResult, type RateLimit, type Runtime } from './types.js';
 
 const READ_TOOLS = ['Read', 'Glob', 'Grep', 'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)'];
@@ -81,6 +82,33 @@ export function parseRateLimit(lines: unknown[]): RateLimit | undefined {
   return { status: ev.status ?? 'unknown', resetsAt: ev.resetsAt ?? tight?.resetsAt, utilization: tight?.utilization };
 }
 
+function toTokens(u: NonNullable<ClaudeJson['usage']>): Tokens {
+  const input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  const cached = u.cache_read_input_tokens ?? 0;
+  const output = u.output_tokens ?? 0;
+  return { input, cached_input: cached, output, total: input + cached + output };
+}
+
+/**
+ * What a stream without a result used (a timeout, a crash), summed over its assistant messages. Input and cache
+ * counts are exact. Output is a lower bound: a message's event is sent before its output is complete.
+ */
+function streamedTokens(lines: unknown[]): Tokens {
+  const byMessage = new Map<string, NonNullable<ClaudeJson['usage']>>();
+  for (const l of lines as { type?: string; message?: { id?: string; usage?: ClaudeJson['usage'] } }[]) {
+    if (l?.type === 'assistant' && l.message?.id && l.message.usage) byMessage.set(l.message.id, l.message.usage);
+  }
+  const sum = noTokens();
+  for (const u of byMessage.values()) {
+    const t = toTokens(u);
+    sum.input += t.input;
+    sum.cached_input += t.cached_input;
+    sum.output += t.output;
+    sum.total += t.total;
+  }
+  return sum;
+}
+
 /** Reads `--output-format stream-json` (one event per line, the result last) or a single JSON result. */
 export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs'> {
   const lines: unknown[] = [];
@@ -96,12 +124,8 @@ export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs
     | ClaudeJson
     | undefined;
   const rateLimit = parseRateLimit(lines);
-  if (!data) return { ok: false, text: '', tokens: noTokens(), rateLimit, error: `unreadable output: ${tail(stdout, 500)}` };
-  const u = data.usage ?? {};
-  const input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-  const cached = u.cache_read_input_tokens ?? 0;
-  const output = u.output_tokens ?? 0;
-  const tokens = { input, cached_input: cached, output, total: input + cached + output };
+  if (!data) return { ok: false, text: '', tokens: streamedTokens(lines), rateLimit, error: `unreadable output: ${tail(stdout, 500)}` };
+  const tokens = toTokens(data.usage ?? {});
   const ok = !data.is_error && data.subtype !== 'error';
   const denied = (data.permission_denials ?? []).map((d) => `${d.tool_name ?? '?'}: ${d.tool_input?.command ?? d.tool_input?.file_path ?? ''}`.trim());
   return {
@@ -121,7 +145,11 @@ export const claudeCode: Runtime = {
   async call(c) {
     if (c.sandbox && !sandboxOff()) prepareWritable(c.sandbox);
     const r = await exec('claude', claudeArgs(c), { cwd: c.cwd, input: c.prompt, timeoutMs: c.timeoutMs ?? 30 * 60_000, env: claudeEnv(c) });
-    if (r.timedOut) return { ok: false, text: '', tokens: noTokens(), durationMs: r.durationMs, error: 'timed out' };
+    // What was spent before the timeout still counts, and the transcript is what shows why the step ran so long.
+    if (r.timedOut) {
+      const partial = parseClaudeOutput(r.stdout);
+      return { ok: false, text: '', tokens: partial.tokens, rateLimit: partial.rateLimit, durationMs: r.durationMs, transcript: r.stdout, error: 'timed out' };
+    }
     const parsed = { ...parseClaudeOutput(r.stdout), transcript: r.stdout };
     if (r.code !== 0 && parsed.ok) {
       return { ...parsed, ok: false, durationMs: r.durationMs, error: `exit ${r.code}: ${tail(r.stderr, 1000)}` };

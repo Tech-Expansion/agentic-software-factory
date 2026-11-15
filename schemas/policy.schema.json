@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "properties": {
     "max_attempts": { "type": "integer", "minimum": 1, "description": "Build attempts per item before it is blocked." },
-    "max_tokens_per_item": { "type": "integer", "minimum": 1, "description": "Tokens per item, all steps and attempts." },
+    "max_tokens_per_item": { "type": "integer", "minimum": 1, "description": "Tokens per item, all steps and attempts, with a token read from the cache counted as a tenth. Reaching it stops the next build." },
     "check_rounds_in_session": { "type": "integer", "minimum": 0, "description": "Times a developer is sent back by the checks inside its session before it may finish; 0 turns it off." },
     "denied_commands": {
       "type": "array",

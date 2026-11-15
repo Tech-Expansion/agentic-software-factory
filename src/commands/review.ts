@@ -107,11 +107,14 @@ export function reject(id: string, reason: string, root?: string): void {
   appendEvent(product.paths.runs, { at: new Date().toISOString(), item: id, step: 'reject', kind: 'item', outcome: 'rework', detail: reason });
 }
 
-/** Lets a blocked item run again, keeping its worktree and the last feedback. */
+/**
+ * Lets a blocked item run again, keeping its worktree and the last feedback. The owner's retry is a decision to spend
+ * more on the item, so its token budget starts again; otherwise an item blocked by its budget could never go on.
+ */
 export function retry(id: string, root?: string): void {
   const { product, state, st } = reviewItem(id, root);
   if (st?.state !== 'blocked') throw new UsageError(`${id} is not blocked (${st?.state ?? 'never run'})`);
-  state.items[id] = { ...st, state: 'rework', updated_at: new Date().toISOString() };
+  state.items[id] = { ...st, state: 'rework', tokens: 0, updated_at: new Date().toISOString() };
   saveState(product.paths.state, state);
 }
 

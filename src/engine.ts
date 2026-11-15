@@ -9,7 +9,7 @@ import { findSecrets, testTampering } from './integrity.js';
 import type { StopHookConfig, StopHookCount } from './hooks/stop-checks.js';
 import { factoryRoot, type ProductPaths } from './paths.js';
 import { itemPrompt, systemPrompt, type ItemContext } from './prompt.js';
-import { appendEvent, saveTranscript, type RunEvent } from './runlog.js';
+import { appendEvent, budgetTokens, saveTranscript, type RunEvent } from './runlog.js';
 import type { AgentResult, Runtime } from './runtimes/types.js';
 import { loadState, saveState, type ItemState } from './state.js';
 import { loadWorkflow, writesTests, type AgentStep, type Workflow } from './workflow.js';
@@ -139,8 +139,28 @@ function stopHook(paths: ProductPaths, item: string, name: string, cfg: Omit<Sto
   };
 }
 
-/** Runs one item. `given` is the workflow to use instead of the item's own: feature, when a quick change escalates. */
+/**
+ * Runs one item. `given` is the workflow to use instead of the item's own: feature, when a quick change escalates.
+ * Whatever breaks in the runner itself (git, the sandbox, a file) blocks the item with the error as its reason, so it
+ * never stays "in progress" with nobody told.
+ */
 export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Workflow): Promise<ItemOutcome> {
+  try {
+    return await buildItem(ctx, item, given);
+  } catch (err) {
+    const reason = `the runner failed: ${(err as Error).message}`;
+    const at = new Date().toISOString();
+    const state = loadState(ctx.paths.state);
+    const prev = state.items[item.id];
+    state.items[item.id] = { branch: `asf/${item.id}`, worktree: join(ctx.paths.worktrees, item.id), attempts: 0, tokens: 0, ...prev, state: 'blocked', reason, flags: [], updated_at: at };
+    saveState(ctx.paths.state, state);
+    appendEvent(ctx.paths.runs, { at, item: item.id, step: 'item', kind: 'item', outcome: 'blocked', detail: reason });
+    ctx.log?.(`${item.id} blocked: ${reason}`);
+    return { id: item.id, state: 'blocked', reason, tokens: prev?.tokens ?? 0, flags: [] };
+  }
+}
+
+async function buildItem(ctx: EngineContext, item: BacklogItem, given?: Workflow): Promise<ItemOutcome> {
   const { paths, project, policy } = ctx;
   // Items branch from the integration branch when there is one, so each builds on what is already merged.
   const base = integrationBase(paths.root, project);
@@ -175,7 +195,6 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
     return { id: item.id, state, reason, tokens: st.tokens, flags };
   };
 
-  // A worktree made now needs the setup commands, whether the item is new or was reset.
   /** A runtime error: a usage limit pauses the item; anything else (sign-in, a crash) blocks it, without retrying. */
   const stopped = (r: AgentResult, runtimeName: string, stepId: string): ItemOutcome => {
     if (!rateLimited(r)) return finish('blocked', `${runtimeName} failed in ${stepId}: ${r.error}`);
@@ -199,14 +218,19 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
   // Tests written for an earlier run stay locked, as long as the branch still has them.
   if (prev?.tests && isAncestor(worktree, prev.tests.commit)) st.tests = prev.tests;
   st.plan = prev?.plan;
+  st.setup = !fresh && prev?.setup;
   save();
   event({ step: 'item', kind: 'item', outcome: 'started' });
   log(`${item.id} started in ${worktree}`);
 
-  if (fresh && project.commands.setup?.length) {
+  // The setup commands run until they have passed in this worktree: in a new one, and again after a setup that
+  // failed, or the team would be sent to build on dependencies that were never installed.
+  if (!st.setup && project.commands.setup?.length) {
     const setup = runChecks(worktree, project.commands.setup, policy.sandbox);
     event({ step: 'setup', kind: 'checks', outcome: setup.every((r) => r.ok) ? 'passed' : 'failed' });
     if (!setup.every((r) => r.ok)) return finish('blocked', `setup failed:\n${formatChecks(setup)}`);
+    st.setup = true;
+    save();
   }
 
   const commands = [...(project.commands.setup ?? []), ...project.commands.check];
@@ -245,7 +269,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
       hooks: stop?.hooks,
     });
     if (result.transcript) saveTranscript(paths.runs, item.id, `a${attempt}-${step.id}`, result.transcript);
-    st.tokens += result.tokens.total;
+    st.tokens += budgetTokens(result.tokens);
     event({
       attempt,
       step: step.id,
@@ -345,7 +369,9 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
         log(`${item.id} attempt ${attempt} ${step.id}: not needed for this change`);
         continue;
       }
-      if (st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
+      // The budget stops a new build, never the review of one that is done: its reviews are the cheap part, and
+      // blocking there throws away work that already passed the checks.
+      if (step.access === 'write' && st.tokens >= policy.max_tokens_per_item) return finish('blocked', `token budget per item reached (${st.tokens})`);
       const diff = step.access === 'read' ? (stageAndList(worktree, base), stagedDiff(worktree, base, 60_000)) : undefined;
       const { result, runtimeName } = await callAgent(step, attempt, {
         feedback: step.access === 'write' ? feedback : undefined,
@@ -393,7 +419,7 @@ export async function runItem(ctx: EngineContext, item: BacklogItem, given?: Wor
           save();
           event({ attempt, step: step.id, kind: 'item', outcome: 'escalated', detail: `${workflow.name} touched ${sensitive.join(', ')}; built again through ${feature.name}` });
           log(`${item.id} touched sensitive paths in ${workflow.name}; building it again through ${feature.name}, tests first`);
-          return runItem(ctx, item, feature);
+          return buildItem(ctx, item, feature);
         }
         st.summary = result.text.slice(0, 4000);
       }

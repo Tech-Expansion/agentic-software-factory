@@ -1,6 +1,8 @@
 # Default policy. A product's .factory/policy.yaml can only tighten it, with one exception: sandbox.network_allow
 # adds the hosts a product needs. The owner edits that file; agents cannot (it is under .factory/).
 max_attempts: 3
+# Counted with a token read from the cache as a tenth of one. Reaching it stops the next build, not the review of a
+# build that is done; `asf decide <id> retry` starts the count again.
 max_tokens_per_item: 3000000
 # Times a developer on Claude Code is sent back by the checks before it may finish (a Stop hook). 0 turns it off.
 check_rounds_in_session: 3

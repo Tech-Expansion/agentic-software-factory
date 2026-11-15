@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
 import { init } from './commands/init.js';
 import { report } from './commands/report.js';
-import { approve, reject } from './commands/review.js';
+import { approve, reject, retry } from './commands/review.js';
 import { run } from './commands/run.js';
 import { validateProduct } from './commands/validate.js';
 import { git } from './git.js';
@@ -200,6 +200,69 @@ test('a runtime error blocks at once instead of retrying', async () => {
   assert.match(out!.reason!, /not logged in/);
   const items = readEvents(join(root, '.factory/runs')).filter((e) => e.kind === 'agent');
   assert.equal(items[0]?.tokens?.total, 110);
+});
+
+test('a failure of the runner itself blocks the item with the reason, and retry runs it again', async () => {
+  let broken = true;
+  const rt = fake((c) => {
+    if (broken) throw new Error('disk full');
+    return c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(true) };
+  });
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'blocked');
+  assert.match(out!.reason!, /the runner failed: disk full/);
+  const st = loadState(join(root, '.factory/state.json')).items['B-0001'];
+  assert.equal(st?.state, 'blocked', 'not left in progress');
+  assert.match(st!.reason!, /disk full/);
+  broken = false;
+  retry('B-0001');
+  const [again] = await run({ context: { runtime: () => rt } });
+  assert.equal(again?.state, 'review');
+});
+
+test('a setup that failed runs again on retry, before anyone is sent to build', async () => {
+  const project = join(root, '.factory/project.yaml');
+  writeFileSync(project, readFileSync(project, 'utf8').replace('setup: []', 'setup: ["test -f ../../../installed"]'));
+  const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(true) }));
+  const setups = () => readEvents(join(root, '.factory/runs')).filter((e) => e.step === 'setup').map((e) => e.outcome);
+
+  const [first] = await run({ context: { runtime: () => rt } });
+  assert.equal(first?.state, 'blocked');
+  assert.match(first!.reason!, /setup failed/);
+  retry('B-0001');
+  const [second] = await run({ context: { runtime: () => rt } });
+  assert.equal(second?.state, 'blocked', 'the worktree is there, but it was never set up');
+  assert.equal(rt.calls.length + rt.testerCalls.length, 0, 'nobody builds on dependencies that are not installed');
+
+  writeFileSync(join(root, 'installed'), '');
+  retry('B-0001');
+  const [third] = await run({ context: { runtime: () => rt } });
+  assert.equal(third?.state, 'review');
+  assert.deepEqual(setups(), ['failed', 'failed', 'passed']);
+  reject('B-0001', 'again');
+  await run({ context: { runtime: () => rt } });
+  assert.deepEqual(setups(), ['failed', 'failed', 'passed'], 'a worktree that was set up is not set up twice');
+});
+
+test('the budget counts a cache read as a tenth, and stops the next build, not the review of a finished one', async () => {
+  writeFileSync(join(root, '.factory/policy.yaml'), 'max_attempts: 2\nmax_tokens_per_item: 1000\n');
+  // 110 fresh tokens and 5000 read from the cache: 610 against the budget, where counting them in full would be 5110.
+  const tokens = { input: 100, cached_input: 5000, output: 10, total: 5110 };
+  let pass = false;
+  const rt = fake(
+    (c) => ({ tokens, ...(c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(pass) }) }),
+    (c, n) => ({ tokens, ...acceptance(c, n) }),
+  );
+  const [out] = await run({ context: { runtime: () => rt } });
+  assert.equal(out?.state, 'blocked');
+  assert.match(out!.reason!, /token budget per item reached \(1830\)/);
+  const steps = readEvents(join(root, '.factory/runs')).filter((e) => e.kind === 'agent' && e.step !== 'retro').map((e) => e.step);
+  assert.deepEqual(steps, ['tests', 'build', 'verify'], 'the build went past the budget and was still judged; the second build was not started');
+
+  pass = true;
+  retry('B-0001');
+  const [again] = await run({ context: { runtime: () => rt } });
+  assert.equal(again?.state, 'review', "the owner's retry starts the count again");
 });
 
 test('a usage limit pauses the item where it was, instead of failing it', async () => {
