@@ -91,10 +91,10 @@ test('claude adapter: never --bare, write tools only with write access, denials 
   assert.ok(!w.includes('--bare'));
   const allowed = w[w.indexOf('--allowedTools') + 1]!;
   assert.match(allowed, /Edit/);
-  assert.match(allowed, /Bash\(npm test:\*\)/);
+  assert.match(allowed, /(^|,)Bash(,|$)/, 'without a sandbox, any command the policy does not deny');
   assert.match(w[w.indexOf('--disallowedTools') + 1]!, /Bash\(git push:\*\).*Edit\(specs\/\*\*\)/);
   const r = claudeArgs(call({ access: 'read', schema: { type: 'object' } }));
-  assert.doesNotMatch(r[r.indexOf('--allowedTools') + 1]!, /Edit|npm test/);
+  assert.doesNotMatch(r[r.indexOf('--allowedTools') + 1]!, /Edit|(^|,)Bash(,|$)/);
   assert.equal(r[r.indexOf('--json-schema') + 1], '{"type":"object"}');
 });
 

@@ -48,6 +48,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Run agent commands and checks in the sandbox. Off by default; ASF_SANDBOX=1 turns it on for every product."
+        },
         "network_allow": { "type": "array", "items": { "type": "string" } },
         "deny_read": { "type": "array", "items": { "type": "string" } },
         "write_allow": { "type": "array", "items": { "type": "string" } },

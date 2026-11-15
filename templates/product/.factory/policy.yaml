@@ -4,3 +4,8 @@
 # denied_commands: []
 # approval_paths: []
 # protected_paths: []
+
+# Run agent commands and checks in a sandbox: no network beyond an allowlist, no reading of your credentials. It
+# needs `npm install -g @anthropic-ai/sandbox-runtime`, and macOS, Linux or WSL2.
+# sandbox:
+#   enabled: true

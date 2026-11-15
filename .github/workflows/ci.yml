@@ -10,11 +10,15 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24]
     steps:
+      # The tests compare file contents; keep Windows from rewriting line endings on checkout.
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -23,11 +27,17 @@ jobs:
       - run: npm ci
       # Builds, then runs the tests against a fake runtime: no CLI, token or secret is needed.
       - run: npm test
-      # The sandbox the runner uses for checks (ADR 0004). Ubuntu 24.04 blocks the user namespaces bubblewrap needs.
-      - run: |
+      # The sandbox is opt-in (ADR 0013) and runs on macOS and Linux. Ubuntu 24.04 blocks the user namespaces
+      # bubblewrap needs.
+      - if: runner.os == 'Linux'
+        run: |
           sudo apt-get update -q && sudo apt-get install -yq bubblewrap socat
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          npm install -g @anthropic-ai/sandbox-runtime@0.0.81
+      - if: runner.os != 'Windows'
+        run: npm install -g @anthropic-ai/sandbox-runtime@0.0.81
       # Builds every eval case with its own reference solution, in the sandbox, so a broken case or hidden test is
-      # caught here.
-      - run: node dist/cli.js eval --reference --out eval-reference.json
+      # caught here. The cases' own commands are written for a POSIX shell, so they are not run on Windows.
+      - if: runner.os != 'Windows'
+        run: node dist/cli.js eval --reference --out eval-reference.json
+        env:
+          ASF_SANDBOX: 1

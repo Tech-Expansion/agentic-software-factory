@@ -63,8 +63,12 @@ test_paths:
   - "**/*_test.go"
 # Extra regular expressions for secrets. Added lines that match one never get committed.
 secret_patterns: []
-# Agent commands and checks run in a sandbox (Claude Code's own for agents, srt for checks). It fails closed.
+# The sandbox for agent commands and checks (Claude Code's own for agents, srt for checks). It is off unless a
+# product turns it on here (`enabled: true` in its .factory/policy.yaml) or the operator sets ASF_SANDBOX=1. Off, a
+# command an agent runs has your user's access: it is held back by denied_commands, and the runner still puts back
+# protected paths and refuses secrets in a commit. On, it fails closed. It runs on macOS, Linux and WSL2.
 sandbox:
+  enabled: false
   # The only hosts sandboxed commands can reach. Registries need no credentials to read.
   network_allow:
     - registry.npmjs.org

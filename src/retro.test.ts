@@ -16,7 +16,6 @@ import type { AgentCall, Runtime } from './runtimes/types.js';
 import type { Comment, Tracker } from './tracker/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
-process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'asf test';
 process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.invalid';
 
@@ -51,6 +50,9 @@ function team(lessons: Proposed[] | (() => Proposed[]), miss = true, decisions?:
 }
 const retros = (rt: { calls: AgentCall[] }) => rt.calls.filter((c) => c.systemPrompt.includes('retrospective'));
 
+/** A check that passes once the file is there, in a form every platform's shell runs. */
+const exists = (file: string) => `node -e "fs.accessSync('${file}')"`;
+
 let root: string;
 const item = (n: number) => {
   writeFileSync(join(root, `backlog/000${n}-hello.md`), `---\nid: B-000${n}\ntitle: Hello ${n}\nstatus: ready\npriority: ${n}\n---\nCreate hello.txt.\n`);
@@ -62,7 +64,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'asf-product-'));
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', 'check: ["test -f hello.txt"]').replace('notifications: desktop', 'notifications: none'));
+  writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', `check: ${JSON.stringify([exists('hello.txt')])}`).replace('notifications: desktop', 'notifications: none'));
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'init']);
   process.chdir(root);

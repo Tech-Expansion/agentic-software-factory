@@ -1,4 +1,4 @@
-import { claudeSandbox, prepareWritable, sandboxOff, toolchainEnv } from '../sandbox.js';
+import { claudeSandbox, prepareWritable, requireSandbox, toolchainEnv } from '../sandbox.js';
 import { exec, interactive, tail } from './exec.js';
 import type { Tokens } from '../runlog.js';
 import { noTokens, type AgentCall, type AgentResult, type RateLimit, type Runtime } from './types.js';
@@ -27,22 +27,24 @@ interface ClaudeJson {
  * toolchain variables are set on the process itself as well.
  */
 export function claudeEnv(c: AgentCall, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  return c.sandbox && !sandboxOff() ? { ...env, ...toolchainEnv(c.sandbox) } : env;
+  return c.sandbox?.enabled ? { ...env, ...toolchainEnv(c.sandbox) } : env;
 }
 
 /** Builds the argument list. Exported for tests; see ADR 0003 for why each flag is there. */
 export function claudeArgs(c: AgentCall): string[] {
+  const sandbox = c.sandbox?.enabled ? c.sandbox : undefined;
   const allowed = [...READ_TOOLS];
   if (c.access === 'write') {
     const write = c.writeOnly ? c.writeOnly.flatMap((g) => WRITE_TOOLS.map((t) => `${t}(${g})`)) : WRITE_TOOLS;
-    allowed.push(...write, ...c.allowedCommands.map((cmd) => `Bash(${cmd}:*)`));
+    // In the sandbox every command is allowed, because the sandbox holds it. Without one the agent may run any
+    // command the policy does not deny: it needs more than the checks to build (installing a dependency, say).
+    allowed.push(...write, ...(sandbox ? c.allowedCommands.map((cmd) => `Bash(${cmd}:*)`) : ['Bash']));
   }
-  const sandbox = c.sandbox && !sandboxOff() ? c.sandbox : undefined;
   const denied = [
     ...c.deniedCommands.map((cmd) => `Bash(${cmd}:*)`),
     ...c.protectedPaths.flatMap((p) => [`Edit(${p})`, `Write(${p})`]),
-    // The Read tool is not sandboxed, so the paths the sandbox hides are denied to it as well.
-    ...(sandbox?.deny_read ?? []).flatMap((p) => [`Read(${p})`, `Read(${p}/**)`]),
+    // The Read tool is never sandboxed, so the paths the sandbox would hide are denied to it either way.
+    ...(c.sandbox?.deny_read ?? []).flatMap((p) => [`Read(${p})`, `Read(${p}/**)`]),
   ];
   const settings: Record<string, object> = {};
   if (sandbox) {
@@ -143,7 +145,8 @@ export function parseClaudeOutput(stdout: string): Omit<AgentResult, 'durationMs
 export const claudeCode: Runtime = {
   name: 'claude-code',
   async call(c) {
-    if (c.sandbox && !sandboxOff()) prepareWritable(c.sandbox);
+    requireSandbox(c.sandbox);
+    if (c.sandbox?.enabled) prepareWritable(c.sandbox);
     const r = await exec('claude', claudeArgs(c), { cwd: c.cwd, input: c.prompt, timeoutMs: c.timeoutMs ?? 30 * 60_000, env: claudeEnv(c) });
     // What was spent before the timeout still counts, and the transcript is what shows why the step ran so long.
     if (r.timedOut) {

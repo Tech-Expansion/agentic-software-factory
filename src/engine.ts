@@ -132,7 +132,9 @@ function stopHook(paths: ProductPaths, item: string, name: string, cfg: Omit<Sto
   rmSync(counter, { force: true });
   writeFileSync(file, JSON.stringify({ ...cfg, counter } satisfies StopHookConfig) + '\n');
   const script = join(factoryRoot, 'dist', 'hooks', 'stop-checks.js');
-  const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+  // Claude Code hands the command to a shell: single quotes for a POSIX one, double quotes on Windows, which both
+  // cmd.exe and Git Bash read.
+  const quote = process.platform === 'win32' ? (s: string) => `"${s}"` : (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
   return {
     hooks: { Stop: [{ hooks: [{ type: 'command', command: `${quote(process.execPath)} ${quote(script)} ${quote(file)}`, timeout: 1800 }] }] },
     count: (): StopHookCount | undefined => (existsSync(counter) ? (JSON.parse(readFileSync(counter, 'utf8')) as StopHookCount) : undefined),

@@ -48,7 +48,7 @@ export function deploy(env: string, opts: { yes?: boolean; root?: string } = {})
 
   const started = Date.now();
   for (const command of commands) {
-    const r = spawnSync('sh', ['-c', command], { cwd: paths.root, stdio: 'inherit', env: process.env });
+    const r = spawnSync(command, { shell: true, cwd: paths.root, stdio: 'inherit', env: process.env });
     if (r.status !== 0) {
       appendEvent(paths.runs, { at: new Date().toISOString(), item: `deploy:${env}`, step: 'deploy', kind: 'item', outcome: 'failed', duration_ms: Date.now() - started, detail: `${command} exited ${r.status ?? r.signal}` });
       return { env, commit, ran: true, ok: false, text: `deploy to ${env} failed: \`${command}\` exited ${r.status ?? r.signal}` };

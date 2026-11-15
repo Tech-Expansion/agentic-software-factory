@@ -14,10 +14,11 @@ import { loadState } from './state.js';
 import type { AgentCall, AgentResult, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
-// These tests are about the engine's logic; sandbox.test.ts covers the sandbox.
-process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'asf test';
 process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.invalid';
+
+/** A check that passes once the file is there, in a form every platform's shell runs. */
+const exists = (file: string) => `node -e "fs.accessSync('${file}')"`;
 
 type Script = (c: AgentCall, n: number) => Partial<AgentResult> & { write?: Record<string, string | undefined> };
 
@@ -62,7 +63,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'asf-product-'));
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', 'check: ["test -f hello.txt"]').replace('notifications: desktop', 'notifications: none'));
+  writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', `check: ${JSON.stringify([exists('hello.txt')])}`).replace('notifications: desktop', 'notifications: none'));
   writeFileSync(join(root, '.factory/policy.yaml'), 'max_attempts: 2\n');
   writeFileSync(join(root, 'specs/hello.md'), '# Hello\n\n## Acceptance criteria\n- AC-001: hello.txt exists.\n');
   writeFileSync(join(root, 'backlog/0001-hello.md'), '---\nid: B-0001\ntitle: Say hello\nstatus: ready\npriority: 1\nspec: specs/hello.md\ncriteria: [AC-001]\n---\nCreate hello.txt.\n');
@@ -222,7 +223,7 @@ test('a failure of the runner itself blocks the item with the reason, and retry 
 
 test('a setup that failed runs again on retry, before anyone is sent to build', async () => {
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8').replace('setup: []', 'setup: ["test -f ../../../installed"]'));
+  writeFileSync(project, readFileSync(project, 'utf8').replace('setup: []', `setup: ${JSON.stringify([exists('../../../installed')])}`));
   const rt = fake((c) => (c.access === 'write' ? { write: { 'hello.txt': 'hi' } } : { structured: verdict(true) }));
   const setups = () => readEvents(join(root, '.factory/runs')).filter((e) => e.step === 'setup').map((e) => e.outcome);
 

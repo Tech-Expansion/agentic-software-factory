@@ -7,10 +7,27 @@ import type { SandboxPolicy } from './config.js';
 export class SandboxError extends Error {}
 
 /**
- * The operator's explicit way out, for machines where the sandbox cannot run. It is never read from a product's
- * files, so an agent cannot switch it off.
+ * The operator's way to turn the sandbox on for every product on this machine, whatever its policy says: an
+ * always-on host, or CI. A product turns it on for itself with `sandbox.enabled` in `.factory/policy.yaml`.
  */
-export const sandboxOff = () => process.env.ASF_UNSAFE_NO_SANDBOX === '1';
+export const sandboxForced = () => process.env.ASF_SANDBOX === '1';
+
+/**
+ * Why agents cannot be sandboxed on this machine, if they cannot. Claude Code's sandbox runs on macOS, Linux and
+ * WSL2; on native Windows it runs commands unsandboxed.
+ */
+export function sandboxUnavailable(platform: NodeJS.Platform = process.platform): string | undefined {
+  if (platform === 'win32') {
+    return 'the sandbox is on, and on Windows it only runs inside WSL2: run asf there, or turn it off (`sandbox.enabled` in .factory/policy.yaml, ASF_SANDBOX)';
+  }
+  return undefined;
+}
+
+/** A sandbox that was asked for is never quietly left out: where it cannot run, nothing starts. */
+export function requireSandbox(sb: SandboxPolicy | undefined): void {
+  const why = sb?.enabled ? sandboxUnavailable() : undefined;
+  if (why) throw new SandboxError(why);
+}
 
 const SECRET_NAME = /TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|PRIVATE_?KEY|CREDENTIAL|SESSION_?KEY/i;
 
@@ -88,12 +105,13 @@ export function hasSrt(): boolean {
   return srtChecked;
 }
 
-/** A command line that runs `command` in the sandbox, or as it is when the operator turned the sandbox off. */
+/** A command line that runs `command` in the sandbox, or as it is when the sandbox is off. */
 export function sandboxed(command: string, sb: SandboxPolicy | undefined): { cmd: string; args: string[]; shell: boolean } {
-  if (!sb || sandboxOff()) return { cmd: command, args: [], shell: true };
+  if (!sb?.enabled) return { cmd: command, args: [], shell: true };
+  requireSandbox(sb);
   if (!hasSrt()) {
     throw new SandboxError(
-      'the sandbox runtime is not installed: `npm install -g @anthropic-ai/sandbox-runtime` (on Linux also bubblewrap and socat), or set ASF_UNSAFE_NO_SANDBOX=1 to run unsandboxed',
+      'the sandbox is on, but its runtime is not installed: `npm install -g @anthropic-ai/sandbox-runtime` (on Linux also bubblewrap and socat), or turn the sandbox off (`sandbox.enabled` in .factory/policy.yaml, ASF_SANDBOX)',
     );
   }
   prepareWritable(sb);

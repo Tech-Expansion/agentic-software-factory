@@ -12,9 +12,11 @@ import { readEvents } from './runlog.js';
 import type { AgentCall, Runtime } from './runtimes/types.js';
 
 process.env.ASF_HOME = mkdtempSync(join(tmpdir(), 'asf-home-'));
-process.env.ASF_UNSAFE_NO_SANDBOX = '1';
 process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'asf test';
 process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'asf@example.invalid';
+
+/** A check that passes once the file is there, in a form every platform's shell runs. */
+const exists = (file: string) => `node -e "fs.accessSync('${file}')"`;
 
 let root: string;
 beforeEach(() => {
@@ -22,10 +24,10 @@ beforeEach(() => {
 });
 
 test('the stop check sends the developer back while the checks fail, at most max times', () => {
-  const cfg = { cwd: root, commands: ['test -f done.txt'], max: 2, counter: join(root, 'count.json') };
+  const cfg = { cwd: root, commands: [exists('done.txt')], max: 2, counter: join(root, 'count.json') };
   const first = stopCheck(cfg);
   assert.equal(first.block, true);
-  assert.match(first.reason!, /round 1 of 2[\s\S]*`test -f done\.txt`: FAILED/);
+  assert.match(first.reason!, /round 1 of 2[\s\S]*accessSync\('done\.txt'\)"`: FAILED/);
   assert.equal(stopCheck(cfg).block, true);
   assert.deepEqual(stopCheck(cfg), { block: false, count: { rounds: 2, blocked: 2, passed: false } }, 'let go; the runner decides');
   writeFileSync(join(root, 'done.txt'), '');
@@ -75,7 +77,7 @@ function claudeWithHooks(): Runtime & { calls: AgentCall[]; reasons: string[] } 
 test('a failing check is fixed inside the build session, without another attempt', async () => {
   init(root, 'demo');
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', 'check: ["test -f hello.txt"]').replace('notifications: desktop', 'notifications: none'));
+  writeFileSync(project, readFileSync(project, 'utf8').replace('check: []', `check: ${JSON.stringify([exists('hello.txt')])}`).replace('notifications: desktop', 'notifications: none'));
   writeFileSync(join(root, 'backlog/0001-hello.md'), '---\nid: B-0001\ntitle: Say hello\nstatus: ready\n---\nCreate hello.txt.\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'init']);
