@@ -77,13 +77,13 @@ export async function learn(ctx: EngineContext, item: BacklogItem, outcome: Item
   }
 }
 
-/** With an integration branch, an item nothing flagged merges on its own; the owner releases batches later. */
+/** An item nothing flagged merges into the base branch on its own; the owner releases it to production later. */
 export function settle(product: Product, outcome: ItemOutcome, log?: (msg: string) => void): ItemOutcome {
-  const branch = product.project.integration_branch;
-  if (outcome.state !== 'review' || !branch || outcome.flags.length) return outcome;
+  if (outcome.state !== 'review' || outcome.flags.length) return outcome;
   try {
-    approve(outcome.id, product.paths.root);
-    log?.(`${outcome.id} merged into ${branch}`);
+    const { into, dev } = approve(outcome.id, product.paths.root);
+    log?.(`${outcome.id} merged into ${into}`);
+    if (dev) log?.(dev.text);
     return { ...outcome, state: 'merged' };
   } catch (err) {
     return { ...outcome, state: 'blocked', reason: (err as Error).message };

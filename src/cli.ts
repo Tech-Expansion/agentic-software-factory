@@ -31,14 +31,14 @@ Every day:
   asf decide <id> <decision>        give a decision:
                                       asf decide B-0001 approve            a plan, or a change in review
                                       asf decide B-0001 reject <reason>    send it back with feedback
-                                      asf decide B-0001 retry              let a blocked item run again
+                                      asf decide B-0001 retry [answer]     let a blocked item run again, with your answer
                                       asf decide B-0001 Q1 <answer>        answer the product owner
                                       asf decide B-0001 accept             take every recommendation left
                                       asf decide L-1 accept|reject         a lesson from a retro
   asf run [--item <id>] [--all]     build the next ready item now (or one, or all)
   asf run --watch [--workers <n>] [--interval <s>] [--once]
                                     keep working unattended: intake, questions, builds, n at a
-                                    time; Ctrl-C stops after the items in progress
+                                    time (2 by default); Ctrl-C stops after the items in progress
 
 Setting up:
   asf init [dir] [--name <name>]    create a product skeleton and register it
@@ -46,7 +46,8 @@ Setting up:
   asf validate                      check settings, policy, workflows, backlog and spec links
 
 Shipping:
-  asf release [--dry]               merge the integration branch into the base branch
+  asf release [--dry]               release what is on the base branch to production: a pull
+                                    request for you to merge, or a local merge without a remote
   asf deploy <env> [--yes]          show what a deploy will run and what changed since the last
                                     one; with --yes, run the product's deploy commands for <env>
 
@@ -132,7 +133,7 @@ async function main(argv: string[]): Promise<number> {
       const r = init(args[0] ?? '.', values.name);
       for (const f of r.created) console.log(`created ${f}`);
       for (const f of r.skipped) console.log(`kept    ${f}`);
-      console.log('\nNext: run `asf discover` there to plan the product with the product owner.');
+      console.log('\nNext: run `asf discover` to talk the idea through; the tech lead chooses the stack and its checks after it.');
       return 0;
     }
     case 'discover':
@@ -193,7 +194,7 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       const r = release();
-      console.log(r.items.length ? `released ${r.items.join(', ')} (${r.commit})` : 'nothing to release');
+      console.log(!r.items.length ? 'nothing to release' : r.pr ? `release pull request for ${r.items.join(', ')}: ${r.pr}\nmerge it to go live` : `released ${r.items.join(', ')} (${r.commit})`);
       return 0;
     }
     case 'eval': {

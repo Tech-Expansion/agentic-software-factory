@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
 import { clarify } from './commands/clarify.js';
 import { init } from './commands/init.js';
+import { release } from './commands/review.js';
 import { run } from './commands/run.js';
 import { parseAnswers, parseDecision, sync } from './commands/sync.js';
 import { git } from './git.js';
@@ -97,6 +98,8 @@ test('a ticket goes from intake to merged through the tracker alone, and only th
   assert.match(readFileSync(file, 'utf8'), /status: ready[\s\S]*Which platform\? mobile, iOS first\nand Android later/);
   assert.ok(!j.labels['AI-7']!.has('needs-po'));
 
+  // hello.txt is the owner's to decide, so the built item waits for their approval on the ticket.
+  writeFileSync(join(root, '.factory/policy.yaml'), 'owner_paths: ["hello.txt"]\n');
   const [built] = await run({ context: ctx });
   assert.equal(built?.state, 'review');
   await sync({ tracker: j.tracker });
@@ -110,10 +113,16 @@ test('a ticket goes from intake to merged through the tracker alone, and only th
   assert.equal(readFileSync(join(root, 'hello.txt'), 'utf8'), 'x\n');
   assert.match(git(root, ['log', '-1', '--format=%s']), /^\[AI-7\] Merge B-0001/, 'commits lead with the ticket');
   assert.match(git(root, ['log', '--format=%s']), /^\[AI-7\] feat: Ví Cardano/m);
-  assert.deepEqual(j.moves, ['AI-7→Clarifying', 'AI-7→Ready', 'AI-7→In Review', 'AI-7→Done']);
-  assert.match(j.comments['AI-7']!.at(-1)!.body, /B-0001 is in main/);
   await sync({ tracker: j.tracker });
-  assert.equal(j.comments['AI-7']!.filter((c) => /is in main/.test(c.body)).length, 1, 'said once');
+  assert.match(j.comments['AI-7']!.at(-1)!.body, /B-0001 passed its checks and review and is merged into main/);
+  assert.deepEqual(j.moves, ['AI-7→Clarifying', 'AI-7→Ready', 'AI-7→In Review'], 'not done before it is live');
+
+  release();
+  await sync({ tracker: j.tracker });
+  assert.deepEqual(j.moves, ['AI-7→Clarifying', 'AI-7→Ready', 'AI-7→In Review', 'AI-7→Done']);
+  assert.match(j.comments['AI-7']!.at(-1)!.body, /B-0001 is released to production/);
+  await sync({ tracker: j.tracker });
+  assert.equal(j.comments['AI-7']!.filter((c) => /is released/.test(c.body)).length, 1, 'said once');
 });
 
 test('the owner sees the whole product on the digest ticket: a digest each day, the board on /status', async () => {

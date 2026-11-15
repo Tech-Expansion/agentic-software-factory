@@ -9,10 +9,10 @@ decisions get an ADR.
 
 - No code is written for an item that is not Ready.
 - No policy breach: protected paths, denied commands, budgets, locked acceptance tests.
-- Nothing reaches the base branch without the owner's release. A change to `owner_paths`, or one a reviewer
+- Nothing reaches production without the owner's release. A change to `owner_paths`, or one a reviewer
   escalates, waits for the owner however it was reviewed.
 - Nothing that looks like a secret is committed, and checks run without secrets in their environment.
-- With the sandbox on (opt-in, ADR 0013), no secret leaves the machine through the factory: agent commands and checks
+- With the sandbox on (opt-in, ADR 0014), no secret leaves the machine through the factory: agent commands and checks
   run sandboxed, without network access beyond an allowlist. Without it, a command an agent runs has the owner's
   access.
 
@@ -48,17 +48,18 @@ and tests, Simon Willison's lethal trifecta, Dex Horthy and Harper Reed on plann
    commands that say who decided.
 8. **Fewer round trips.** Checks run inside the developer's session before it may finish.
 
-## Where we are (2026-11-14)
+## Where we are (2026-11-15)
 
 Built and covered by tests with a fake runtime:
 
 - Evals with hidden tests and pass^k; the sandbox, opt-in; acceptance tests written first and locked (ADR 0004,
-  0013).
+  0014).
 - Intake and the Definition of Ready: the product owner scans the market in discovery, clarifies and sizes items.
 - Product overrides of roles, skills and workflows, and a quick workflow for small changes (ADR 0009).
 - A product team: product owner, developer, QA and tech lead on every item; security reviewer and UX designer as
   opt-in specialists; DevOps for infrastructure, deployed by the owner (ADR 0010, 0011, 0012).
-- Unattended runs with `asf run --watch`, the board, an integration branch with batch releases (ADR 0006).
+- Unattended runs with `asf run --watch`, the board; main as the development line that dev deploys from on its own,
+  production released by the owner, and failures that go up the team before the owner (ADR 0006, 0013).
 - Retros whose lessons become checks, decided by the tech lead (ADR 0007, 0012).
 - Jira through `acli` (ADR 0005), not yet checked against the real `acli`.
 
@@ -87,7 +88,7 @@ Exit: every bar in "What works means" is met. Then 1.0 and the npm release.
 - **The eval set grades the factory only as well as its cases.** Hidden tests are written or reviewed by a person,
   and cases are added whenever real work finds a failure the set missed.
 - **The sandbox is off by default, and only as tight as its allowlist when on.** Off, an agent's command can read
-  and send what the owner can (ADR 0013). On, a package registry on the allowlist is a way out for anything that can
+  and send what the owner can (ADR 0014). On, a package registry on the allowlist is a way out for anything that can
   publish to it; publishing commands stay denied and registries need no credentials.
 - **Judgement calls are unmeasured.** The size call, the tech lead's escalations and lesson decisions, and the market
   scan are a model's judgement until the pilot measures them.

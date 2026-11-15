@@ -1,8 +1,8 @@
 # Architecture
 
 How the factory works inside, for whoever wants to change it or needs to trust it. To use it, start with the
-[README](README.md). The reasons behind each decision are in [docs/adr/](docs/adr/), and where it is heading in
-[docs/roadmap.md](docs/roadmap.md).
+[README](README.md) and [the owner's guide](docs/owners-guide.md). The reasons behind each decision are in
+[docs/adr/](docs/adr/), and where it is heading in [docs/roadmap.md](docs/roadmap.md).
 
 ## The idea
 
@@ -19,8 +19,9 @@ flowchart LR
   R -->|"one step: role + skills + item"| C["claude / codex<br/>subprocess"]
   C -->|"edits"| W["git worktree<br/>of one item"]
   R -->|"checks, policy, commit"| W
-  W -->|"passed"| I["integration branch"]
-  I -->|"asf release (you)"| M["main"]
+  W -->|"passed"| M["main<br/>the development line"]
+  M -->|"on its own"| D["dev environment"]
+  M -->|"asf release (you)"| L["production<br/>what is live"]
 ```
 
 ## Two repositories
@@ -68,17 +69,19 @@ stateDiagram-v2
   plan --> building: approve
   building --> merged: passed, nothing flagged
   building --> review: passed, something is yours to decide
-  building --> blocked: attempts or budget used up, or an error
+  building --> blocked: the team could not settle it, the budget ran out, or an error
   review --> merged: approve
   review --> building: reject with a reason
-  blocked --> building: retry
+  blocked --> building: retry, with your answer
   merged --> done: asf release
   done --> [*]
 ```
 
-Without an `integration_branch` in `project.yaml`, every passing item waits in `review` and `approve` merges it into
-the base branch. With one, items that nothing flagged merge there on their own and you release them in batches
-([ADR 0006](docs/adr/0006-integration-branch-and-batch-releases.md)).
+`main` is the development line: an item that passes merges into it on its own, in the item's worktree, so your
+checkout can be anywhere. `production` is what is live, and only your release moves it: with a `remote`,
+`asf release` opens a pull request from main into production; without one it merges locally. The dev environment
+deploys itself after each merge when `dev_deploy` says how
+([ADR 0013](docs/adr/0013-main-is-dev-production-is-the-owners.md)).
 
 The `feature` workflow, which builds an item:
 
@@ -93,7 +96,9 @@ flowchart LR
   C & V & L & S -->|fail| B
 ```
 
-- A failing step sends the item back to the developer with the failure as feedback, up to `max_attempts`.
+- A failing step sends the item back to the developer with the failure as feedback, up to `max_attempts`. Then the
+  item goes up the team before it reaches you: the tech lead diagnoses it and plans it again, once; after that the
+  product owner splits it into smaller items, or asks you what the product should do.
 - Your checks (`commands.check`: lint, build, test) run before any model reviews anything. On Claude Code the
   developer also runs them before it may finish, so a failure is fixed in the same session
   ([ADR 0008](docs/adr/0008-checks-inside-the-builders-session.md)).
@@ -102,13 +107,18 @@ flowchart LR
   sensitive path is thrown away and built again through `feature`. `infra` is the DevOps engineer's workflow
   ([ADR 0009](docs/adr/0009-product-overrides-and-the-quick-workflow.md),
   [0011](docs/adr/0011-devops-builds-the-pipeline-the-owner-deploys.md)).
+- After `asf discover`, while the product has no checks, the tech lead chooses the stack from the brief, records it
+  as an ADR in the product and sets `commands.setup` and `commands.check`. The product owner asks you about the
+  product, never about the technology.
 
 ## What waits for you
 
-The product owner's blocking questions, a plan that needs a decision of yours, a change to `owner_paths` (database
-migrations by default), a decision a reviewer escalates (a cost, something irreversible, the agreed architecture), a
-blocked item, the release and the deploy. The team decides the rest. Lessons are decided by the tech lead and you can
-reverse one with `asf decide L-n`.
+The product owner's blocking questions; a plan that needs a decision of yours; a change to `owner_paths` (database
+migrations by default) and, while dev deploys itself, to `deploy_paths` (CI, deploy scripts, infrastructure); a
+decision a reviewer escalates (a cost, something irreversible, the agreed architecture); the product owner's
+question on an item the team could not build; the release, and a deploy you run yourself. The team decides the rest
+([ADR 0012](docs/adr/0012-the-client-decides-the-tech-lead-reviews.md)). Lessons are decided by the tech lead, and
+you can reverse one with `asf decide L-n`.
 
 ## What the runner enforces
 
@@ -122,12 +132,12 @@ These hold whatever a model says, and each has a test:
 - `max_attempts` and `max_tokens_per_item` stop an item that is not converging. The budget counts a token read from
   the cache as a tenth, stops the next build rather than the review of a finished one, and starts again when you
   `retry`.
-- Nothing reaches the base branch without your `approve` or `release`.
+- Nothing reaches production without your release.
 - A product's `.factory/policy.yaml` can only tighten `policies/default.yaml`.
 
 ## The sandbox
 
-Off by default ([ADR 0013](docs/adr/0013-the-sandbox-is-opt-in.md), which amends
+Off by default ([ADR 0014](docs/adr/0014-the-sandbox-is-opt-in.md), which amends
 [0004](docs/adr/0004-sandbox-agent-commands-and-checks.md)).
 
 - **Off:** a developer on Claude Code may run any command that is not on `denied_commands`; reviewers can only read.
@@ -164,17 +174,32 @@ Tokens are a design metric. Each step gets only its role, the skills it names an
 run before any model review. Every step appends what it used to `.factory/runs/<date>.jsonl`, with its transcript
 next to it; `asf --date <day>` reports a day by step, and `asf eval` compares versions of the factory.
 
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `asf [--json]`, `asf --date <day>` | The board, or the report of one day |
+| `asf decide <id> …` | `approve`, `reject <reason>`, `retry [answer]`, `Q1 <answer>`, `accept`; `accept` or `reject` a lesson `L-n` |
+| `asf show <id>` | An item's open questions, its branch and why it stopped; or a lesson |
+| `asf run [--item id] [--all] [--watch]` | Build now, or keep working unattended (`--workers n`, 2 by default; `--interval s`, `--once`) |
+| `asf init`, `asf discover`, `asf validate` | Set up and plan a product |
+| `asf release [--dry]`, `asf deploy <env> [--yes]` | Open the release pull request into production (or merge it locally); run the deploy commands with your credentials: dev from main, other environments from production |
+| `asf clarify`, `asf sync` | One round of what `--watch` does: clarify new items; sync with Jira ([ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md)) |
+| `asf eval` | Measure the factory on its eval cases (factory development) |
+
 ## Make it yours
 
-Without changing the factory ([ADR 0009](docs/adr/0009-product-overrides-and-the-quick-workflow.md)):
+In a new product's `.factory/project.yaml`, set `remote` (for example `origin`) so a release is a pull request into
+production, and `dev_deploy` for a test environment that deploys itself. Without changing the factory
+([ADR 0009](docs/adr/0009-product-overrides-and-the-quick-workflow.md)):
 
 - `.factory/agents/<role>.md` and `.factory/skills/<name>/SKILL.md` add product rules to a role or a skill.
 - `.factory/workflows/<name>.yaml` replaces a workflow or adds one. `workflow:` picks the default, per product, per
   item, or per ticket label `asf-<name>`.
-- In `project.yaml`: `integration_branch`, `specialists:`, `paths:`, `models:` and `runtimes.roles:` (a model or a
-  CLI per role), `deploy:`, `tracker:` (Jira through `acli`,
-  [ADR 0005](docs/adr/0005-tracker-through-acli-decisions-by-owner-comments.md)).
-- In `policy.yaml`: `owner_paths`, `sensitive_paths`, lower budgets, more denied commands, the sandbox.
+- In `project.yaml`: `specialists:`, `paths:`, `models:` and `runtimes.roles:` (a model or a CLI per role),
+  `production_branch:`, `remote:`, `dev_deploy:`, `deploy:`, `tracker:`.
+- In `policy.yaml`: `owner_paths`, `deploy_paths`, `sensitive_paths`, lower budgets, more denied commands, the
+  sandbox and its network allowlist.
 
 ## Where the code is
 
@@ -186,7 +211,7 @@ Without changing the factory ([ADR 0009](docs/adr/0009-product-overrides-and-the
 | `src/runtimes/` | The Claude Code and Codex adapters: flags in, tokens and answers out |
 | `src/checks.ts`, `src/sandbox.ts`, `src/hooks/` | Your checks, the sandbox, the checks inside a developer's session |
 | `src/integrity.ts`, `src/git.ts` | Secret and test-tampering scans; worktrees and merges |
-| `src/clarify.ts`, `src/retro.ts` | The product owner's questions; lessons |
+| `src/clarify.ts`, `src/retro.ts`, `src/commands/stack.ts` | The product owner's questions; lessons; the tech lead's choice of stack |
 | `src/status.ts`, `src/runlog.ts`, `src/state.ts` | The board, the run log, run state |
 | `src/tracker/`, `src/eval.ts` | Jira; the eval harness |
 
@@ -201,6 +226,7 @@ solutions. Rules for changing this repository: [AGENTS.md](AGENTS.md).
   session apply to Claude Code.
 - The size call, the tech lead's escalations and the market scan are a model's judgement, not yet measured.
   Unattended agents have no web access.
+- Release pull requests need GitHub and its CLI, `gh`, signed in; merge them with a merge commit, not a squash.
 - SRE is designed, not built. Jira is the only tracker, not yet checked against the real `acli`.
 - End-to-end runs so far were on macOS. On Windows the runner's tests run in CI, and a full run with a real CLI has
   not been done yet.

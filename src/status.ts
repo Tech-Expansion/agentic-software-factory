@@ -58,6 +58,8 @@ export interface Board {
 }
 
 function column(item: BacklogItem, st: ItemState | undefined, factory: string, ready: Set<string>): Column {
+  // A merged item is done on the base branch but not live until it is released.
+  if (st?.state === 'merged') return 'merged';
   if (item.status === 'done') return 'done';
   if (item.status === 'draft') return 'draft';
   if (item.status === 'new') {
@@ -97,14 +99,18 @@ export function board(product: Product, now: Date = new Date()): Board {
     if (st.state === 'plan-review')
       decisions.push({ ...base, kind: 'plan', since: st.updated_at, what: st.reason ?? 'approve the plan of a high-risk item', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `asf show ${item.id}, then asf decide ${item.id} approve`) });
     else if (st.state === 'review')
-      decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `decide on the change: ${st.flags.join('; ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.integration_branch ?? project.base_branch ?? 'main'}...${st.branch}, then asf decide ${item.id} approve`) });
+      decisions.push({ ...base, kind: 'review', since: st.updated_at, what: st.flags?.length ? `decide on the change: ${st.flags.join('; ')}` : 'review the change', how: reply(item.tracker, '"/approve" or "/reject <reason>"', `git diff ${project.base_branch ?? 'main'}...${st.branch}, then asf decide ${item.id} approve`) });
     else if (st.state === 'blocked')
-      decisions.push({ ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf decide ${item.id} retry`) });
+      decisions.push(
+        st.escalated === 'owner'
+          ? { ...base, kind: 'answer', since: st.updated_at, what: st.reason ?? 'the team needs your decision', how: reply(item.tracker, '"/retry <your answer>"', `asf decide ${item.id} retry "<your answer>"`) }
+          : { ...base, kind: 'blocked', since: st.updated_at, what: st.reason ?? 'blocked', how: reply(item.tracker, '"/retry"', `asf decide ${item.id} retry`) },
+      );
   }
   const merged = Object.entries(state.items).filter(([, v]) => v.state === 'merged');
   if (merged.length) {
     const since = merged.map(([, v]) => v.updated_at).sort()[0]!;
-    decisions.push({ item: merged.map(([id]) => id).sort().join(', '), title: `${merged.length} item(s) in ${project.integration_branch}`, kind: 'release', since, what: `release into ${project.base_branch ?? 'main'}`, how: 'asf release' });
+    decisions.push({ item: merged.map(([id]) => id).sort().join(', '), title: `${merged.length} item(s) on ${project.base_branch ?? 'main'}, not live yet`, kind: 'release', since, what: `release into ${project.production_branch ?? 'production'}`, how: project.remote ? 'asf release, then merge the pull request it opens' : 'asf release' });
   }
   const digest = project.tracker?.digest;
   for (const l of loadLessons(paths.factory).filter((x) => x.status === 'proposed')) {

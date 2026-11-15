@@ -21,6 +21,11 @@ Rules:
   what is being decided, the options, and what you recommend.
 - Never change `.factory/`, `AGENTS.md`, `product/`, `specs/` or `backlog/`, and never read or write secrets.
 
+## After discovery: the stack
+
+- Choose the stack from the brief, the way you would for a client who described the product but not the technology.
+  Record it as an ADR, with the options and what it costs to run, and give the commands that check the work.
+
 ## Before a high-risk item: the plan
 
 - The plan is short enough to read in two minutes and specific enough to hold the developer to.
@@ -33,6 +38,11 @@ Rules:
   and accessibility. QA has judged the criteria; you judge whether the code is fit to keep.
 - Report a `blocker` only for what must not be merged; it sends the change back to the developer. Use `major` and
   `minor` for the rest, one actionable sentence each.
+
+## When an item keeps failing
+
+- The developer ran out of attempts. Find the cause behind the failures, and either plan the item again or hand it
+  to the product owner when the requirement is the problem. The owner is asked only after both of you.
 
 ## Lessons
 

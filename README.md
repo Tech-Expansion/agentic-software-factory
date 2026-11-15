@@ -1,18 +1,25 @@
-# agentic-software-factory
+# Agentic Software Factory (ASF)
 
-A software team of AI agents that works on your own machine. You say what you want; the team plans it with you,
-builds it, tests it and reviews it, using your own Claude Code or Codex subscription.
+**Describe the app you want. A small team of AI agents builds it, tests it, and asks you only the decisions that are
+yours to make.**
 
-You are the client. You decide what the product does and when it ships. The team makes the technical calls and
-comes back to you only with decisions that are yours.
+> Status: 0.1, experimental. It works end to end, but it is new: expect rough edges, and keep an eye on what it
+> builds. Not yet on npm.
 
-> Status: 0.1, experimental. Works end to end with Claude Code 2.1 and codex-cli 0.147. Not yet on npm.
+Think of it as hiring a small software agency, except the agency is a team of AI agents that works on your own
+computer, with the AI subscription you already have.
 
-## What you need
+- **You are the owner.** You explain what you want, answer questions about it, and decide when it goes live.
+- **The team does the rest.** It plans the work, writes the code and the tests, reviews itself, and fixes what fails.
+- **You see it grow.** Every finished piece lands in a test version on its own; the real one changes only when you
+  release.
 
-- [Node.js](https://nodejs.org) 22 or later, and git
-- [Claude Code](https://claude.com/claude-code) or Codex, installed and signed in
-- macOS, Linux or Windows
+## Before you start
+
+- A Mac, Linux or Windows computer
+- A **Claude** subscription (Pro or Max), or a **ChatGPT** subscription that includes Codex
+- [Node.js](https://nodejs.org) 22 or later, git, and [Claude Code](https://claude.com/claude-code) or Codex,
+  installed and signed in. If that line means nothing to you, ask someone technical for 15 minutes, once.
 
 ## Install
 
@@ -28,52 +35,63 @@ cd agentic-software-factory
 npm install && npm run build && npm link
 ```
 
-`asf --help` now works in any folder.
+## Getting started
 
-## Your first product
+Open a terminal and type the commands below. Each one prints what it did and what to do next.
 
-1. **Create it.**
+**1. Create a project** (`my-idea` is any name you like):
 
-   ```bash
-   asf init my-idea
-   ```
+```bash
+asf init my-idea
+```
 
-   ```bash
-   cd my-idea
-   ```
+```bash
+cd my-idea
+```
 
-2. **Plan it.** `asf discover` opens a conversation with the product owner. It asks about your idea one question at a
-   time, then writes the brief, the specs and the list of work. Nothing is built until you agree to it.
-3. **Check it.** `asf validate` tells you if anything is missing before the team starts, and how to save the plan
-   so the team can see it.
-4. **Let the team work.** `asf run --watch` builds the items one after another until you stop it with Ctrl-C.
-5. **Decide what is yours.** `asf` shows the board: what the team is doing, and every decision waiting for you with
-   the exact command that gives it.
+**2. Talk the idea through.** This opens a conversation with the product owner. Answer in your own words; when you
+are not sure, say "decide for me".
 
-## Everyday commands
+```bash
+asf discover
+```
 
-| Command | What it does |
-| --- | --- |
-| `asf` | The board: progress, and what waits for you |
-| `asf show <id>` | One item: its questions, its work, why it stopped |
-| `asf decide <id> …` | Your decision: `approve`, `reject <reason>`, `retry`, or an answer such as `Q1 web` |
-| `asf run --watch` | Keep the team working |
-| `asf release` | Ship what the team finished into your main branch |
+**3. Check the plan.** It tells you if anything is missing, and how to save the plan so the team can see it.
 
-`asf --help` lists the rest.
+```bash
+asf validate
+```
+
+**4. Let the team work.** Leave this window open. Press Ctrl-C to stop it; it picks up where it was next time.
+
+```bash
+asf run --watch
+```
+
+**5. Check in, any time, in a second window.** The board shows what each piece of work is doing and, under
+"Waiting for you", every decision the team needs, with the exact command that gives it.
+
+```bash
+asf
+```
+
+**6. Go live** when you are happy with what is on the test version:
+
+```bash
+asf release
+```
 
 ## Is it safe?
 
-Each item is built in its own copy of your code and reaches your main branch only when you say so. Changes the team
-makes to your plans, specs or settings are undone, and anything that looks like a password or key is never committed.
+Each piece is built in its own copy of your code, and only you put a release live. By default the commands an agent
+runs can reach what you can reach on your computer, like any coding agent you run yourself. For a product with keys,
+money or personal data, turn on the sandbox: [how](ARCHITECTURE.md#the-sandbox).
 
-By default the commands an agent runs have the same access to your machine as you do, like any coding agent you run
-yourself. For a product that handles keys, money or personal data, turn on the sandbox:
-[how](ARCHITECTURE.md#the-sandbox).
+## Learn more
 
-## Go deeper
-
-- [ARCHITECTURE.md](ARCHITECTURE.md): the team, how an item is built, what the runner enforces, settings, platforms
+- [The owner's guide](docs/owners-guide.md): the team, an example from idea to release, giving decisions, questions
+  people ask, the words you will see
+- [ARCHITECTURE.md](ARCHITECTURE.md): how it works inside, every command and setting, platforms, known limits
 - [docs/roadmap.md](docs/roadmap.md): what works, how it is measured, what is next
 - [docs/adr/](docs/adr/): the decisions behind it, and why
 - [AGENTS.md](AGENTS.md): working on the factory itself

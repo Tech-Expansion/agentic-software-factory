@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { beforeEach, test } from 'node:test';
 import { init } from './commands/init.js';
 import { watch } from './commands/watch.js';
@@ -32,7 +32,7 @@ function team(opts: { limitFirst?: number } = {}): Runtime & { calls: AgentCall[
       rt.peak = Math.max(rt.peak, active);
       await new Promise((r) => setTimeout(r, 30));
       active--;
-      if (c.access === 'write' && !c.writeOnly) writeFileSync(join(c.cwd, 'out.txt'), c.cwd);
+      if (c.access === 'write' && !c.writeOnly) writeFileSync(join(c.cwd, `out-${basename(c.cwd)}.txt`), c.cwd);
       return { ok: true, text: 'done', structured: pass, tokens, durationMs: 1 };
     },
     interactive: async () => 0,
@@ -42,7 +42,7 @@ function team(opts: { limitFirst?: number } = {}): Runtime & { calls: AgentCall[
 
 let root: string;
 const items = (n: number) => {
-  for (let i = 1; i <= n; i++) writeFileSync(join(root, `backlog/000${i}-x.md`), `---\nid: B-000${i}\ntitle: Item ${i}\nstatus: ready\npriority: ${i}\n---\nWrite out.txt.\n`);
+  for (let i = 1; i <= n; i++) writeFileSync(join(root, `backlog/000${i}-x.md`), `---\nid: B-000${i}\ntitle: Item ${i}\nstatus: ready\npriority: ${i}\n---\nWrite a file of its own.\n`);
   git(root, ['add', '-A']);
   git(root, ['commit', '-q', '-m', 'items']);
 };
@@ -70,9 +70,10 @@ test('independent items are built in parallel, never more than the workers', asy
   items(3);
   const rt = team();
   const r = await watch({ workers: 2, rounds: 40, sleep: quick, context: { runtime: () => rt } });
-  assert.deepEqual(r.outcomes.map((o) => o.state), ['review', 'review', 'review']);
+  assert.deepEqual(r.outcomes.map((o) => o.state), ['merged', 'merged', 'merged']);
   assert.equal(rt.peak, 2);
-  assert.deepEqual(Object.values(loadState(join(root, '.factory/state.json')).items).map((s) => s.state), ['review', 'review', 'review']);
+  assert.deepEqual(Object.values(loadState(join(root, '.factory/state.json')).items).map((s) => s.state), ['merged', 'merged', 'merged']);
+  assert.ok(['B-0001', 'B-0002', 'B-0003'].every((id) => existsSync(join(root, `out-${id}.txt`))), 'each merged into main');
 });
 
 test('a usage limit pauses the work until the quota resets, then it resumes', async () => {
@@ -91,7 +92,7 @@ test('a usage limit pauses the work until the quota resets, then it resumes', as
     },
     context: { runtime: () => rt },
   });
-  assert.deepEqual(r.outcomes.map((o) => o.state), ['paused', 'review']);
+  assert.deepEqual(r.outcomes.map((o) => o.state), ['paused', 'merged']);
   assert.ok(slept.includes(60_000) && slept.some((ms) => ms < 60_000), `waited for the reset: ${slept.join(', ')}`);
   const calls = rt.calls.length;
   assert.ok(calls >= 4, 'tests, build and verify after the pause');
@@ -105,7 +106,7 @@ test('items that were running when the factory stopped resume', async () => {
   const logs: string[] = [];
   const r = await watch({ rounds: 10, sleep: quick, log: (m) => logs.push(m), context: { runtime: () => team() } });
   assert.ok(logs.includes('B-0001 resumes where it stopped'));
-  assert.equal(r.outcomes[0]?.state, 'review');
+  assert.equal(r.outcomes[0]?.state, 'merged');
 });
 
 test('one process at a time; a lock left by a dead one is taken over', async () => {

@@ -1,11 +1,11 @@
-# 0013. The sandbox is opt-in
+# 0014. The sandbox is opt-in
 
 Status: accepted
 Date: 2026-11-15
 Deciders: project owner
 
-Amends ADR 0004 (every agent command and check runs sandboxed, failing closed) and the roadmap's hard gate on
-secrets.
+Amends ADR 0004 (every agent command and check runs sandboxed, failing closed), ADR 0013 (a dev deploy with
+`run: commands` is sandboxed) and the roadmap's hard gate on secrets.
 
 ## Context
 
@@ -60,4 +60,7 @@ other commands run.
   in the repository. Unattended agents still have no web tools.
 - A product should turn the sandbox on when it handles keys, money or personal data, runs on an always-on host, or
   takes tickets written by people other than the owner.
+- A dev deploy with `run: commands` (ADR 0013) still sees only the secrets named for it, but it reaches only the
+  listed hosts when the sandbox is on. `run: push`, which leaves the credentials with the hosting, stays the
+  preferred way.
 - Codex is unchanged: it runs in its own sandbox, and starts without secrets in its environment.

@@ -70,7 +70,7 @@ test('the board puts every item in a column and every decision in one queue, old
 
 test('with a tracker, decisions are replies on the ticket; merged items wait for a release', () => {
   const project = join(root, '.factory/project.yaml');
-  writeFileSync(project, readFileSync(project, 'utf8') + 'integration_branch: next\ntracker:\n  kind: jira\n  project: AI\n  owner: acc\n');
+  writeFileSync(project, readFileSync(project, 'utf8') + 'tracker:\n  kind: jira\n  project: AI\n  owner: acc\n');
   item(1, 'ready', 'tracker: AI-3\n');
   item(2, 'ready');
   const p = openProduct();
